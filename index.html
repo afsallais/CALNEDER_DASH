@@ -71,15 +71,26 @@ html.inv{--paper:#050505;--card:#0b0b0b;--ink:#e8e8e4;--mute:#9a9a95;--line:#4a4
 .tools{margin-top:12px;text-align:center}
 .tools button{background:none;border:1.5px solid var(--line);color:var(--ink);border-radius:10px;padding:6px 16px;font:inherit;font-size:14px;letter-spacing:.06em;cursor:pointer;touch-action:manipulation}
 .tools button:active,.tools button[aria-pressed="true"]{background:var(--ink);color:var(--paper)}
-.news{margin-top:14px;padding-top:12px;border-top:1.5px solid var(--line)}
-.news-title{text-align:center;color:var(--mute);font-size:12px;font-weight:700;letter-spacing:.12em;margin-bottom:7px}
-.news-status{text-align:center;color:var(--mute);font-size:10px;margin-bottom:6px}
-.news-list{display:grid;gap:5px}
-.news-item{display:block;color:var(--ink);text-decoration:none;border:1px solid var(--line);border-radius:9px;padding:7px 8px;line-height:1.25}
-.news-item:active{background:var(--ink);color:var(--paper)}
-.news-item .nt{font-size:13px;font-weight:600}
-.news-item .ns{font-size:10px;color:var(--mute);margin-top:3px}
-.news-item:active .ns{color:var(--paper)}
+.study-desk{margin-top:14px;padding-top:12px;border-top:1.5px solid var(--line)}
+.study-head,.tasks-head{display:flex;align-items:center;justify-content:space-between}
+.study-head{color:var(--mute);font-size:12px;font-weight:700;letter-spacing:.12em;margin-bottom:8px}
+.focus-card{border:1px solid var(--line);border-radius:12px;padding:10px;text-align:center}
+.focus-label{color:var(--mute);font-size:10px;font-weight:700;letter-spacing:.12em}
+.focus-time{font-size:38px;line-height:1.1;font-weight:700;font-variant-numeric:tabular-nums;margin:3px 0 7px}
+.focus-actions{display:flex;justify-content:center;gap:7px}
+.focus-actions button,.task-form button{background:none;border:1.5px solid var(--line);color:var(--ink);border-radius:8px;padding:6px 12px;font:inherit;font-size:12px;font-weight:600;cursor:pointer}
+.focus-actions button:first-child{background:var(--ink);color:var(--paper)}
+.focus-status{font-size:10px;color:var(--mute);margin-top:6px;min-height:1.3em}
+.tasks-head{font-size:13px;margin:12px 0 6px}
+.tasks-count{color:var(--mute);font-size:11px}
+.task-form{display:flex;gap:6px}
+.task-form input{min-width:0;flex:1;padding:7px 8px;border:1px solid var(--line);border-radius:8px;background:var(--bezel);color:var(--ink);font:inherit;font-size:12px}
+.task-form button{padding:5px 10px}
+.task-list{list-style:none;margin:7px 0 0;padding:0;display:grid;gap:4px}
+.task-row{display:flex;align-items:center;gap:7px;padding:5px 7px;border:1px solid var(--line);border-radius:8px;font-size:12px}
+.task-row input{accent-color:var(--ink)}
+.task-row.done span{text-decoration:line-through;color:var(--mute)}
+.task-empty{color:var(--mute);font-size:11px;text-align:center;padding:8px}
 @media (max-width:700px){.screen{grid-template-columns:1fr}.clocks{grid-template-columns:1fr 1fr}.clockbox .analog{width:min(135px,90%)}}
 </style>
 </head>
@@ -132,10 +143,17 @@ html.inv{--paper:#050505;--card:#0b0b0b;--ink:#e8e8e4;--mute:#9a9a95;--line:#4a4
     <div class="grid" id="grid"></div>
     <div class="foot" id="foot"></div>
     <div class="tools"><button id="inv" aria-pressed="false" title="Invert display (I)">&#9680; Invert</button></div>
-    <div class="news">
-      <div class="news-title">TODAY'S NEWS · DELFT / NL</div>
-      <div class="news-status" id="newsStatus">Loading latest headlines…</div>
-      <div class="news-list" id="newsList"></div>
+    <div class="study-desk">
+      <div class="study-head"><span>STUDY DESK</span><span id="studyDate"></span></div>
+      <div class="focus-card">
+        <div class="focus-label">FOCUS SESSION</div>
+        <div class="focus-time" id="focusTime">25:00</div>
+        <div class="focus-actions"><button id="focusToggle">Start focus</button><button id="focusReset">Reset</button></div>
+        <div class="focus-status" id="focusStatus">A quiet 25-minute study sprint.</div>
+      </div>
+      <div class="tasks-head"><strong>Today's priorities</strong><span class="tasks-count" id="taskCount">0 done</span></div>
+      <form class="task-form" id="taskForm"><input id="taskInput" maxlength="80" placeholder="Add a study task" aria-label="Add a study task"><button type="submit">Add</button></form>
+      <ul class="task-list" id="taskList"></ul>
     </div>
   </section>
 
@@ -414,147 +432,55 @@ locate();setInterval(locate,15*60*1000);
 
 
 
-// ===== PARSED LIVE NEWS =====
-// Use Jina Reader to turn current news pages into browser-readable text.
-// Sources: Omroep Delft (local) + NL Times (Netherlands, English).
-var NEWS_SOURCES=[
- {url:"https://www.omroepdelft.nl/delft/",name:"Delft"},
- {url:"https://nltimes.nl/",name:"Netherlands"}
-];
-
-function escNews(v){
- return String(v||"").replace(/[&<>"']/g,function(c){
-  return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c];
- });
+// ===== LOCAL STUDY DESK =====
+var FOCUS_LENGTH=25*60,focusRemaining=FOCUS_LENGTH,focusInterval=null;
+function showFocusTime(){
+ var m=Math.floor(focusRemaining/60),s=focusRemaining%60;
+ $("focusTime").textContent=String(m).padStart(2,"0")+":"+String(s).padStart(2,"0");
+ $("focusToggle").textContent=focusInterval?"Pause":"Start focus";
 }
-
-function cleanNewsTitle(t){
- return String(t||"")
-  .replace(/^\s*(Image|Video)\s*:\s*/i,"")
-  .replace(/\s+/g," ")
-  .trim();
-}
-
-function parseReaderText(text,source){
- var out=[],seen={};
- var lines=text.split(/\r?\n/);
-
- for(var i=0;i<lines.length;i++){
-  var line=lines[i].trim();
-
-  // Markdown headings commonly used by Jina Reader.
-  var m=line.match(/^#{2,4}\s+(.+)$/);
-  if(m){
-   var title=cleanNewsTitle(m[1]);
-   if(title && title.length>18 && title.length<180 &&
-      !/^(Delft|Delftse Hout|Delft Regio|Politiek|Politics|Business|Crime|Health|Culture|Lifestyle|Top stories|Latest news)$/i.test(title)){
-    var key=title.toLowerCase();
-    if(!seen[key]){
-     seen[key]=1;
-     var link="";
-     for(var j=i+1;j<Math.min(i+5,lines.length);j++){
-      var lm=lines[j].match(/\]\((https?:\/\/[^)]+)\)/);
-      if(lm){link=lm[1];break;}
-     }
-     out.push({title:title,link:link,source:source,time:""});
-    }
-   }
-  }
-
-  // Also catch Markdown link lines when no heading was emitted.
-  var lm=line.match(/^\[([^\]]{18,180})\]\((https?:\/\/[^)]+)\)/);
-  if(lm){
-   var lt=cleanNewsTitle(lm[1]),lk=lm[2],kk=lt.toLowerCase();
-   if(!seen[kk] && !/^(About|Contact|Privacy|Advertise|Subscribe)$/i.test(lt)){
-    seen[kk]=1;out.push({title:lt,link:lk,source:source,time:""});
-   }
-  }
+$("studyDate").textContent=new Date().toLocaleDateString("en",{weekday:"short",day:"numeric",month:"short"}).toUpperCase();
+$("focusToggle").onclick=function(){
+ if(focusInterval){clearInterval(focusInterval);focusInterval=null;$("focusStatus").textContent="Paused — ready when you are."}
+ else{
+  $("focusStatus").textContent="One task at a time. You've got this.";
+  focusInterval=setInterval(function(){
+   focusRemaining--;
+   if(focusRemaining<=0){clearInterval(focusInterval);focusInterval=null;focusRemaining=FOCUS_LENGTH;$("focusStatus").textContent="Sprint complete — take a short break."}
+   showFocusTime();
+  },1000);
  }
- return out;
-}
-
-async function getParsedSource(src){
- var reader="https://r.jina.ai/"+src.url;
- var r=await fetch(reader,{cache:"no-store"});
- if(!r.ok)throw new Error("news source");
- var text=await r.text();
- return parseReaderText(text,src.name).slice(0,8);
-}
-
-async function translateDutchTitle(title){
- // Translate Delft/Oud-Dutch headlines to English in the browser.
- // Google Translate's lightweight endpoint is used only for the short headline text.
- try{
-  var q=encodeURIComponent(title);
-  var u="https://translate.googleapis.com/translate_a/single?client=gtx&sl=nl&tl=en&dt=t&q="+q;
-  var r=await fetch(u,{cache:"no-store"});
-  if(!r.ok)throw new Error("translation");
-  var data=await r.json();
-  if(data && data[0]){
-   var translated=data[0].map(function(x){return x&&x[0]?x[0]:"";}).join("").trim();
-   if(translated)return translated;
-  }
- }catch(e){}
- return title;
-}
-
-async function loadNews(){
- var status=$("newsStatus"),list=$("newsList");
- status.textContent="Updating…";
-
- var all=[];
- var results=await Promise.allSettled(NEWS_SOURCES.map(getParsedSource));
- results.forEach(function(r){
-  if(r.status==="fulfilled")all=all.concat(r.value);
+ showFocusTime();
+};
+$("focusReset").onclick=function(){
+ clearInterval(focusInterval);focusInterval=null;focusRemaining=FOCUS_LENGTH;
+ $("focusStatus").textContent="A quiet 25-minute study sprint.";showFocusTime();
+};
+var STUDY_TASKS=[];
+try{STUDY_TASKS=JSON.parse(localStorage.getItem("eink-study-tasks")||"[]")}catch(e){}
+function renderStudyTasks(){
+ var list=$("taskList");list.innerHTML="";
+ var done=STUDY_TASKS.filter(function(t){return t.done}).length;
+ $("taskCount").textContent=done+" / "+STUDY_TASKS.length+" done";
+ if(!STUDY_TASKS.length){list.innerHTML='<li class="task-empty">Add one small next step to get started.</li>';return}
+ STUDY_TASKS.forEach(function(task,index){
+  var li=document.createElement("li");li.className="task-row"+(task.done?" done":"");
+  var box=document.createElement("input");box.type="checkbox";box.checked=!!task.done;box.setAttribute("aria-label","Mark "+task.text+" complete");
+  box.onchange=function(){STUDY_TASKS[index].done=box.checked;saveStudyTasks()};
+  var label=document.createElement("span");label.textContent=task.text;
+  li.appendChild(box);li.appendChild(label);list.appendChild(li);
  });
-
- // Prefer Delft headlines first, then Netherlands headlines.
- all.sort(function(a,b){
-  if(a.source!==b.source)return a.source==="Delft"?-1:1;
-  return 0;
- });
-
- var seen={},unique=[];
- all.forEach(function(n){
-  var k=n.title.toLowerCase().replace(/[^a-z0-9]+/g," ").trim();
-  if(k&&!seen[k]){
-   seen[k]=1;
-   unique.push(n);
-  }
- });
-
- unique=unique.slice(0,6);
-
- // Translate Dutch Delft headlines while leaving NL Times headlines unchanged.
- unique=await Promise.all(unique.map(async function(n){
-  if(n.source==="Delft") n.displayTitle=await translateDutchTitle(n.title);
-  else n.displayTitle=n.title;
-  return n;
- }));
-
- if(!unique.length){
-  status.textContent="News feed unavailable · retrying";
-  list.innerHTML='<div class="news-item"><div class="nt">Unable to parse today’s headlines</div><div class="ns">Automatic retry in 15 min</div></div>';
-  return;
- }
-
- list.innerHTML="";
- unique.forEach(function(n){
-  var a=document.createElement("a");
-  a.className="news-item";
-  a.href=n.link||"#";
-  a.target="_blank";
-  a.rel="noopener noreferrer";
-  a.innerHTML='<div class="nt">'+escNews(n.displayTitle||n.title)+'</div>'+
-             '<div class="ns">'+escNews(n.source)+(n.time?" · "+escNews(n.time):"")+'</div>';
-  list.appendChild(a);
- });
-
- status.textContent="Live headlines · "+new Date().toLocaleTimeString("en-NL",{hour:"2-digit",minute:"2-digit",hour12:false});
 }
+function saveStudyTasks(){
+ try{localStorage.setItem("eink-study-tasks",JSON.stringify(STUDY_TASKS))}catch(e){}
+ renderStudyTasks();
+}
+$("taskForm").onsubmit=function(e){
+ e.preventDefault();var input=$("taskInput"),value=input.value.trim();if(!value)return;
+ STUDY_TASKS.push({text:value,done:false});input.value="";saveStudyTasks();
+};
+showFocusTime();renderStudyTasks();
 
-loadNews();
-setInterval(loadNews,15*60*1000);
 
 // Manual editing
 $("loc").onclick=function(){
