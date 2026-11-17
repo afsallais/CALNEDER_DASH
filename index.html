@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>E-Ink Dashboard</title>
 <style>
-:root{--paper:#d9d9d6;--card:#dededa;--ink:#2b2b2b;--mute:#6f6f6b;--line:#8a8a86;--bezel:#f3f3f1;
+:root{--paper:#d9d9d6;--card:#dededa;--ink:#2b2b2b;--mute:#6f6f6b;--line:#8a8a86;--bezel:#f3f3f1;--sunrise:var(--ink);--sunset:var(--mute);
 box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
 html{scroll-padding-top:env(safe-area-inset-top,0px)}
 *{box-sizing:border-box}
@@ -70,9 +70,19 @@ dialog input,dialog select{width:100%;padding:8px;border:1.5px solid var(--line)
 dialog button{margin-top:16px;padding:8px 16px;border:1.5px solid var(--ink);border-radius:8px;background:var(--ink);color:var(--paper);font:inherit;cursor:pointer}
 /* ---- inverted (dark) mode ---- */
 html.inv{--paper:#050505;--card:#0b0b0b;--ink:#e8e8e4;--mute:#9a9a95;--line:#4a4a47;--bezel:#000}
-.tools{margin-top:12px;text-align:center}
-.tools button{background:none;border:1.5px solid var(--line);color:var(--ink);border-radius:10px;padding:6px 16px;font:inherit;font-size:14px;letter-spacing:.06em;cursor:pointer;touch-action:manipulation}
-.tools button:active,.tools button[aria-pressed="true"]{background:var(--ink);color:var(--paper)}
+html.color{--paper:#f6f3e8;--card:#fffdf7;--ink:#29353b;--mute:#657278;--line:#bec8c3;--bezel:#e6ece8;--sunrise:#b8741d;--sunset:#a85150;--accent-blue:#e2edf4;--accent-sage:#e4eddf}
+html.color.inv{--paper:#20272a;--card:#293337;--ink:#edf0e9;--mute:#b4c0bc;--line:#596761;--bezel:#151b1d;--sunrise:#f3c774;--sunset:#ef9d99;--accent-blue:#344753;--accent-sage:#33432f}
+html.color .cal{background:var(--accent-blue)}
+html.color .revision-panel{background:var(--accent-sage)}
+html.color .focus-card:not(.running):not(.complete){background:#eff3e7}
+.display-options{grid-column:1/-1;display:flex;justify-content:flex-end;position:relative;z-index:50;margin-bottom:-10px}
+.display-dots{width:38px;height:34px;border:1.5px solid var(--line);border-radius:9px;background:var(--card);color:var(--ink);font:inherit;font-size:24px;line-height:1;cursor:pointer}
+.display-menu{position:absolute;top:40px;right:0;min-width:190px;padding:6px;background:var(--card);border:1.5px solid var(--line);border-radius:10px;box-shadow:0 5px 18px rgba(0,0,0,.22)}
+.display-menu[hidden]{display:none}
+.display-menu button{display:block;width:100%;text-align:left;padding:9px 10px;border:0;border-radius:7px;background:transparent;color:var(--ink);font:inherit;font-size:13px;cursor:pointer}
+.display-menu button:hover,.display-menu button:focus-visible,.display-menu button[aria-pressed="true"]{background:var(--bezel)}
+.analog .sunrise-mark{stroke:var(--sunrise)}
+.analog .sunset-mark{stroke:var(--sunset)}
 .study-desk{margin-top:14px;padding-top:12px;border-top:1.5px solid var(--line)}
 .study-head,.tasks-head{display:flex;align-items:center;justify-content:space-between}
 .study-head{color:var(--mute);font-size:12px;font-weight:700;letter-spacing:.12em;margin-bottom:8px}
@@ -127,6 +137,13 @@ html.inv{--paper:#050505;--card:#0b0b0b;--ink:#e8e8e4;--mute:#9a9a95;--line:#4a4
 </head>
 <body>
 <main class="screen">
+  <div class="display-options">
+    <button id="displayDots" class="display-dots" type="button" aria-label="Display options" aria-haspopup="true" aria-expanded="false">&#8942;</button>
+    <div class="display-menu" id="displayMenu" role="menu" hidden>
+      <button id="colorToggle" type="button" role="menuitemcheckbox" aria-checked="false">Color version</button>
+      <button id="inv" type="button" role="menuitemcheckbox" aria-checked="false" title="Invert display (I)">Invert display</button>
+    </div>
+  </div>
   <section class="left">
     <div class="card">
       <div class="loc" id="loc" title="Tap to edit">—</div>
@@ -175,7 +192,7 @@ html.inv{--paper:#050505;--card:#0b0b0b;--ink:#e8e8e4;--mute:#9a9a95;--line:#4a4
     <h2 class="mh"><button id="prev" aria-label="Previous month">&#8249;</button><span id="month"></span><button id="next" aria-label="Next month">&#8250;</button></h2>
     <div class="grid" id="grid"></div>
     <div class="foot" id="foot"></div>
-    <div class="tools"><button id="inv" aria-pressed="false" title="Invert display (I)">&#9680; Invert</button></div>
+    
     <div class="study-desk">
       <div class="study-head"><span>STUDY DESK</span><span id="studyDate"></span></div>
       <div class="focus-card">
@@ -222,7 +239,7 @@ html.inv{--paper:#050505;--card:#0b0b0b;--ink:#e8e8e4;--mute:#9a9a95;--line:#4a4
 
 <script>
 var KEY="eink-dash";
-try{if(localStorage.getItem("eink-inv")==="1")document.documentElement.classList.add("inv")}catch(e){}
+try{if(localStorage.getItem("eink-inv")==="1")document.documentElement.classList.add("inv");if(localStorage.getItem("eink-color")==="1")document.documentElement.classList.add("color")}catch(e){}
 var S={loc:"Delft · NL",temp:18,cond:"Broken clouds",hum:72,wind:4.1,pres:1012,rise:"07:12",set:"19:05",riseISO:"",setISO:""};
 try{var s=JSON.parse(localStorage.getItem(KEY)||"null");if(s)S=Object.assign(S,s)}catch(e){}
 var $=function(i){return document.getElementById(i)};
@@ -407,15 +424,36 @@ gr.addEventListener("click",function(ev){var k=ev.target.dataset&&ev.target.data
  clearTimeout(ct);ct=setTimeout(function(){sel=k;flashKey=k;renderCal(true)},250)});
 gr.addEventListener("dblclick",function(ev){var k=ev.target.dataset&&ev.target.dataset.key;if(!k)return;
  clearTimeout(ct);if(BM[k])delete BM[k];else BM[k]=1;saveBM();sel=k;flashKey=k;renderCal(true)});
+function closeDisplayMenu(){
+ $("displayMenu").hidden=true;$("displayDots").setAttribute("aria-expanded","false");
+}
+$("displayDots").onclick=function(e){
+ e.stopPropagation();var open=$("displayMenu").hidden;
+ $("displayMenu").hidden=!open;$("displayDots").setAttribute("aria-expanded",open);
+};
+$("displayMenu").onclick=function(e){e.stopPropagation()};
+document.addEventListener("click",closeDisplayMenu);
+document.addEventListener("keydown",function(e){if(e.key==="Escape")closeDisplayMenu()});
 function toggleInv(){
+ closeDisplayMenu();
  fullRefresh(function(){
   var on=document.documentElement.classList.toggle("inv");
-  $("inv").setAttribute("aria-pressed",on);
+  $("inv").setAttribute("aria-checked",on);
   try{localStorage.setItem("eink-inv",on?"1":"0")}catch(e){}
  });
 }
+function toggleColor(){
+ closeDisplayMenu();
+ fullRefresh(function(){
+  var on=document.documentElement.classList.toggle("color");
+  $("colorToggle").setAttribute("aria-checked",on);
+  try{localStorage.setItem("eink-color",on?"1":"0")}catch(e){}
+ });
+}
 $("inv").onclick=toggleInv;
-$("inv").setAttribute("aria-pressed",document.documentElement.classList.contains("inv"));
+$("colorToggle").onclick=toggleColor;
+$("inv").setAttribute("aria-checked",document.documentElement.classList.contains("inv"));
+$("colorToggle").setAttribute("aria-checked",document.documentElement.classList.contains("color"));
 function nav(k){
  if(k===0&&off===0)return;
  off=k===0?0:off+k;
