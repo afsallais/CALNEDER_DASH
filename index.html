@@ -10,7 +10,7 @@ box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:en
 html{scroll-padding-top:env(safe-area-inset-top,0px)}
 *{box-sizing:border-box}
 body{margin:0;min-height:100vh;background:var(--bezel);color:var(--ink);font-family:"Segoe UI",system-ui,-apple-system,Helvetica,Arial,sans-serif;display:flex;align-items:center;justify-content:center;padding:16px}
-.screen{width:100%;max-width:980px;background:var(--paper);border:6px solid var(--bezel);outline:2px solid var(--line);border-radius:10px;padding:18px;display:grid;grid-template-columns:1fr 1fr;gap:16px}
+.screen{width:100%;max-width:1480px;background:var(--paper);border:6px solid var(--bezel);outline:2px solid var(--line);border-radius:10px;padding:18px;display:grid;grid-template-columns:minmax(0,.9fr) minmax(0,.9fr) minmax(320px,1.05fr);align-items:start;gap:16px}
 .card{background:var(--card);border:1.5px solid var(--line);border-radius:18px;padding:18px 22px}
 .left{display:grid;grid-template-rows:auto 1fr;gap:16px}
 .loc{display:none}
@@ -95,7 +95,28 @@ html.inv{--paper:#050505;--card:#0b0b0b;--ink:#e8e8e4;--mute:#9a9a95;--line:#4a4
 .task-remove{margin-left:auto;flex:0 0 auto;border:0;background:none;color:var(--mute);font:inherit;font-size:17px;line-height:1;padding:0 3px;cursor:pointer}
 .task-remove:focus-visible{outline:2px solid var(--ink);outline-offset:1px}
 .task-empty{color:var(--mute);font-size:11px;text-align:center;padding:8px}
-@media (max-width:700px){.screen{grid-template-columns:1fr}.clocks{grid-template-columns:1fr 1fr}.clockbox .analog{width:min(135px,90%)}}
+.revision-panel{min-width:0}
+.revision-panel h2{text-align:left;font-size:18px;letter-spacing:.04em;margin-bottom:6px;padding-bottom:7px}
+.revision-week{font-size:11px;color:var(--mute);text-align:center;margin-bottom:7px}
+.revision-progress{font-size:11px;color:var(--mute);text-align:right;margin-bottom:8px}
+.revision-form{display:flex;gap:6px;margin-bottom:10px}
+.revision-form select,.revision-form input{min-width:0;padding:7px 6px;border:1px solid var(--line);border-radius:8px;background:var(--bezel);color:var(--ink);font:inherit;font-size:12px}
+.revision-form select{flex:0 0 106px}
+.revision-form input{flex:1}
+.revision-form button{flex:0 0 auto;background:var(--ink);color:var(--paper);border:1px solid var(--ink);border-radius:8px;padding:6px 10px;font:inherit;font-size:12px;font-weight:600;cursor:pointer}
+.revision-days{display:grid;grid-template-columns:1fr}
+.revision-day{border-top:1px solid var(--line);padding:7px 2px}
+.revision-day-head{display:flex;align-items:center;justify-content:space-between;font-size:12px;font-weight:700}
+.revision-day-date,.revision-day-count{color:var(--mute);font-size:10px;font-weight:500}
+.revision-items{display:grid;gap:4px;margin-top:5px}
+.revision-item{display:flex;align-items:center;gap:6px;font-size:11px;min-width:0}
+.revision-item input{accent-color:var(--ink);flex:0 0 auto}
+.revision-item span{overflow-wrap:anywhere}
+.revision-item.done span{text-decoration:line-through;color:var(--mute)}
+.revision-item .task-remove{font-size:15px}
+.revision-empty{font-size:10px;color:var(--mute);padding:1px 0 0 21px}
+@media (max-width:1100px){.screen{max-width:960px;grid-template-columns:minmax(0,1fr) minmax(0,1fr)}.revision-panel{grid-column:1/-1}.revision-days{grid-template-columns:repeat(2,minmax(0,1fr));column-gap:18px}}
+@media (max-width:700px){.screen{grid-template-columns:1fr}.revision-panel{grid-column:auto}.revision-days{grid-template-columns:1fr}.clocks{grid-template-columns:1fr 1fr}.clockbox .analog{width:min(135px,90%)}}
 </style>
 </head>
 <body>
@@ -162,8 +183,17 @@ html.inv{--paper:#050505;--card:#0b0b0b;--ink:#e8e8e4;--mute:#9a9a95;--line:#4a4
       <ul class="task-list" id="taskList"></ul>
     </div>
   </section>
-
-
+  <section class="card revision-panel" aria-labelledby="revisionTitle">
+    <h2 id="revisionTitle">7-Day Revision Plan</h2>
+    <div class="revision-week" id="revisionWeek"></div>
+    <div class="revision-progress" id="revisionProgress">0 / 0 sessions revised</div>
+    <form class="revision-form" id="revisionForm">
+      <select id="revisionDay" aria-label="Plan day"></select>
+      <input id="revisionTopic" maxlength="90" placeholder="Topic to revise" aria-label="Topic to revise">
+      <button type="submit">Add</button>
+    </form>
+    <div class="revision-days" id="revisionDays"></div>
+  </section>
 </main>
 
 <div id="flash"></div>
@@ -499,6 +529,70 @@ $("taskForm").onsubmit=function(e){
 };
 showFocusTime();renderStudyTasks();
 
+
+// ===== WEEKLY REVISION PLAN =====
+function localDateKey(date){
+ return date.getFullYear()+"-"+String(date.getMonth()+1).padStart(2,"0")+"-"+String(date.getDate()).padStart(2,"0");
+}
+var weekStart=new Date(),weekDay=weekStart.getDay()||7;
+weekStart.setDate(weekStart.getDate()-weekDay+1);weekStart.setHours(0,0,0,0);
+var weekDates=Array.from({length:7},function(_,i){var d=new Date(weekStart);d.setDate(d.getDate()+i);return d});
+var revisionKey="eink-revision-plan-"+localDateKey(weekStart),REVISION_PLAN=[];
+try{REVISION_PLAN=JSON.parse(localStorage.getItem(revisionKey)||"[]")}catch(e){}
+var dayFormat={weekday:"long"},shortDateFormat={day:"numeric",month:"short"};
+$("revisionWeek").textContent=weekDates[0].toLocaleDateString("en",shortDateFormat)+" – "+weekDates[6].toLocaleDateString("en",{day:"numeric",month:"short",year:"numeric"});
+weekDates.forEach(function(date,index){
+ var option=document.createElement("option");
+ option.value=String(index);
+ option.textContent=date.toLocaleDateString("en",{weekday:"short",day:"numeric",month:"short"});
+ $("revisionDay").appendChild(option);
+});
+function renderRevisionPlan(){
+ var days=$("revisionDays");days.innerHTML="";
+ var total=0,done=0;
+ weekDates.forEach(function(date,dayIndex){
+  var items=REVISION_PLAN[dayIndex]||[];
+  total+=items.length;done+=items.filter(function(item){return item.done}).length;
+  var section=document.createElement("section");section.className="revision-day";
+  var head=document.createElement("div");head.className="revision-day-head";
+  var name=document.createElement("span");name.textContent=date.toLocaleDateString("en",dayFormat);
+  var meta=document.createElement("span");meta.className="revision-day-date";
+  meta.textContent=date.toLocaleDateString("en",shortDateFormat);
+  var count=document.createElement("span");count.className="revision-day-count";
+  count.textContent=items.filter(function(item){return item.done}).length+"/"+items.length;
+  var label=document.createElement("span");label.appendChild(meta);label.appendChild(document.createTextNode(" · "));label.appendChild(count);
+  head.appendChild(name);head.appendChild(label);section.appendChild(head);
+  if(!items.length){var empty=document.createElement("div");empty.className="revision-empty";empty.textContent="No revision planned";section.appendChild(empty)}
+  else{
+   var list=document.createElement("div");list.className="revision-items";
+   items.forEach(function(item,itemIndex){
+    var row=document.createElement("div");row.className="revision-item"+(item.done?" done":"");
+    var check=document.createElement("input");check.type="checkbox";check.checked=!!item.done;check.setAttribute("aria-label","Mark "+item.topic+" revised");
+    check.onchange=function(){REVISION_PLAN[dayIndex][itemIndex].done=check.checked;saveRevisionPlan()};
+    var topic=document.createElement("span");topic.textContent=item.topic;
+    var remove=document.createElement("button");remove.type="button";remove.className="task-remove";remove.textContent="×";remove.setAttribute("aria-label","Remove "+item.topic+" from plan");
+    remove.onclick=function(){REVISION_PLAN[dayIndex].splice(itemIndex,1);saveRevisionPlan()};
+    row.appendChild(check);row.appendChild(topic);row.appendChild(remove);list.appendChild(row);
+   });
+   section.appendChild(list);
+  }
+  days.appendChild(section);
+ });
+ $("revisionProgress").textContent=done+" / "+total+" sessions revised";
+}
+function saveRevisionPlan(){
+ try{localStorage.setItem(revisionKey,JSON.stringify(REVISION_PLAN))}catch(e){}
+ renderRevisionPlan();
+}
+$("revisionForm").onsubmit=function(e){
+ e.preventDefault();
+ var topic=$("revisionTopic").value.trim(),day=Number($("revisionDay").value);
+ if(!topic||day<0||day>6)return;
+ if(!REVISION_PLAN[day])REVISION_PLAN[day]=[];
+ REVISION_PLAN[day].push({topic:topic,done:false});
+ $("revisionTopic").value="";saveRevisionPlan();
+};
+renderRevisionPlan();
 
 // Manual editing
 $("loc").onclick=function(){
