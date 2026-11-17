@@ -22,6 +22,8 @@ body{margin:0;min-height:100vh;background:var(--bezel);color:var(--ink);font-fam
 .analog .hh{stroke-width:6}.analog .mh2{stroke-width:4}
 .analog .sh{stroke:#c62828;stroke-width:2;stroke-linecap:round}
 .analog .dot{fill:var(--ink)}
+.analog .sunrise-mark{stroke:var(--ink);stroke-width:5;stroke-linecap:round}
+.analog .sunset-mark{stroke:var(--mute);stroke-width:5;stroke-linecap:round;stroke-dasharray:2 2}
 .clocks{display:grid;grid-template-columns:1fr 1fr;gap:10px;align-items:start}.clockbox{min-width:0}.clocklabel{text-align:center;color:var(--mute);font-size:11px;font-weight:700;letter-spacing:.08em;height:28px;display:flex;align-items:flex-start;justify-content:center;line-height:1.35;padding-top:4px}.clockbox .analog{width:min(150px,90%);margin:8px auto 4px}.clockbox .time{font-size:clamp(25px,4vw,38px);padding:3px 0 8px}
 .time{text-align:center;font-size:clamp(36px,6vw,56px);font-weight:700;letter-spacing:.01em;padding:4px 0 10px;border-bottom:1.5px solid var(--line);line-height:1.1}
 .wx{display:flex;align-items:center;justify-content:center;gap:22px;padding-top:14px}
@@ -90,6 +92,8 @@ html.inv{--paper:#050505;--card:#0b0b0b;--ink:#e8e8e4;--mute:#9a9a95;--line:#4a4
 .task-row{display:flex;align-items:center;gap:7px;padding:5px 7px;border:1px solid var(--line);border-radius:8px;font-size:12px}
 .task-row input{accent-color:var(--ink)}
 .task-row.done span{text-decoration:line-through;color:var(--mute)}
+.task-remove{margin-left:auto;flex:0 0 auto;border:0;background:none;color:var(--mute);font:inherit;font-size:17px;line-height:1;padding:0 3px;cursor:pointer}
+.task-remove:focus-visible{outline:2px solid var(--ink);outline-offset:1px}
 .task-empty{color:var(--mute);font-size:11px;text-align:center;padding:8px}
 @media (max-width:700px){.screen{grid-template-columns:1fr}.clocks{grid-template-columns:1fr 1fr}.clockbox .analog{width:min(135px,90%)}}
 </style>
@@ -103,6 +107,8 @@ html.inv{--paper:#050505;--card:#0b0b0b;--ink:#e8e8e4;--mute:#9a9a95;--line:#4a4
       <svg class="analog" id="analog" viewBox="0 0 200 200" aria-label="Analog clock">
         <circle class="face" cx="100" cy="100" r="94"/>
         <g id="ticks"></g>
+        <line class="sunrise-mark" id="riseMarker" x1="100" y1="3" x2="100" y2="15"><title>Sunrise</title></line>
+        <line class="sunset-mark" id="setMarker" x1="100" y1="3" x2="100" y2="15"><title>Sunset</title></line>
         <line class="hh gl" id="gh1" x1="100" y1="100" x2="100" y2="58"/>
         <line class="mh2 gl" id="gm1" x1="100" y1="100" x2="100" y2="30"/>
         <line class="hh" id="ah" x1="100" y1="100" x2="100" y2="58"/>
@@ -278,6 +284,16 @@ function renderWx(quiet){
  setG($("hum"),S.hum+"%",false,q);setG($("wind"),S.wind+" m/s",false,q);setG($("pres"),S.pres+" hPa",false,q);
  setG($("rise"),t12(S.rise),false,q);setG($("set"),t12(S.set),false,q);
  renderForecast();
+ positionSolarMarkers();
+}
+function positionSolarMarkers(){
+ [["riseMarker",S.rise],["setMarker",S.set]].forEach(function(item){
+  var p=String(item[1]||"").split(":");
+  if(p.length!==2)return;
+  var h=Number(p[0]),m=Number(p[1]);
+  if(!Number.isFinite(h)||!Number.isFinite(m))return;
+  $(item[0]).setAttribute("transform","rotate("+(((h%12)+m/60)*30)+" 100 100)");
+ });
 }
 (function(){var g="",i,a,big,r1,r2;
  for(i=0;i<60;i++){a=i*6*Math.PI/180;big=i%5===0;r1=big?78:85;r2=90;
@@ -468,7 +484,9 @@ function renderStudyTasks(){
   var box=document.createElement("input");box.type="checkbox";box.checked=!!task.done;box.setAttribute("aria-label","Mark "+task.text+" complete");
   box.onchange=function(){STUDY_TASKS[index].done=box.checked;saveStudyTasks()};
   var label=document.createElement("span");label.textContent=task.text;
-  li.appendChild(box);li.appendChild(label);list.appendChild(li);
+  var remove=document.createElement("button");remove.type="button";remove.className="task-remove";remove.textContent="×";remove.setAttribute("aria-label","Remove "+task.text);
+  remove.onclick=function(){STUDY_TASKS.splice(index,1);saveStudyTasks()};
+  li.appendChild(box);li.appendChild(label);li.appendChild(remove);list.appendChild(li);
  });
 }
 function saveStudyTasks(){
