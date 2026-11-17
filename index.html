@@ -115,6 +115,16 @@ html.inv{--paper:#050505;--card:#0b0b0b;--ink:#e8e8e4;--mute:#9a9a95;--line:#4a4
 .revision-item.done span{text-decoration:line-through;color:var(--mute)}
 .revision-item .task-remove{font-size:15px}
 .revision-empty{font-size:10px;color:var(--mute);padding:1px 0 0 21px}
+.revision-connect{border-top:1px solid var(--line);margin-top:10px;padding-top:8px;font-size:11px}
+.revision-connect summary{cursor:pointer;font-weight:700}
+.revision-connect p{font-size:10px;line-height:1.45;color:var(--mute);margin:7px 0}
+.revision-token-link{font-size:10px;color:var(--ink);font-weight:700}
+.revision-connect-form{display:grid;gap:6px;margin-top:7px}
+.revision-connect-form input{width:100%;padding:7px 8px;border:1px solid var(--line);border-radius:8px;background:var(--bezel);color:var(--ink);font:inherit;font-size:11px}
+.revision-connect-actions{display:flex;gap:6px}
+.revision-connect-actions button{background:var(--ink);color:var(--paper);border:1px solid var(--ink);border-radius:7px;padding:5px 10px;font:inherit;font-size:10px;font-weight:700;cursor:pointer}
+.revision-connect-actions button+button{background:transparent;color:var(--ink)}
+.revision-sync-status{font-size:10px;color:var(--mute);margin-top:6px;min-height:1.3em}
 @media (max-width:1100px){.screen{max-width:960px;grid-template-columns:minmax(0,1fr) minmax(0,1fr)}.revision-panel{grid-column:1/-1}.revision-days{grid-template-columns:repeat(2,minmax(0,1fr));column-gap:18px}}
 @media (max-width:700px){.screen{grid-template-columns:1fr}.revision-panel{grid-column:auto}.revision-days{grid-template-columns:1fr}.clocks{grid-template-columns:1fr 1fr}.clockbox .analog{width:min(135px,90%)}}
 </style>
@@ -193,6 +203,16 @@ html.inv{--paper:#050505;--card:#0b0b0b;--ink:#e8e8e4;--mute:#9a9a95;--line:#4a4
       <button type="submit">Add</button>
     </form>
     <div class="revision-days" id="revisionDays"></div>
+    <details class="revision-connect">
+      <summary>Sync this plan with GitHub</summary>
+      <p>The plan file is public. Create a fine-grained token for this repo with <b>Contents: Read and write</b>. The token stays in this tab and is never saved in the page or repo.</p>
+      <a class="revision-token-link" href="https://github.com/settings/personal-access-tokens/new" target="_blank" rel="noopener noreferrer">Create a fine-grained token ↗</a>
+      <div class="revision-connect-form">
+        <input id="githubPlanToken" type="password" autocomplete="off" placeholder="Paste token here" aria-label="GitHub fine-grained token">
+        <div class="revision-connect-actions"><button type="button" id="githubPlanConnect">Connect</button><button type="button" id="githubPlanDisconnect">Disconnect</button></div>
+      </div>
+      <div class="revision-sync-status" id="revisionSyncStatus" role="status">Saved in this browser. Connect to sync with GitHub.</div>
+    </details>
   </section>
 </main>
 
@@ -593,6 +613,91 @@ $("revisionForm").onsubmit=function(e){
  $("revisionTopic").value="";saveRevisionPlan();
 };
 renderRevisionPlan();
+
+// ===== PUBLIC GITHUB PLAN SYNC =====
+var githubPlanToken="",githubSyncTimer=null,githubSyncBusy=false,githubSyncAgain=false;
+var GITHUB_PLAN_URL="https://api.github.com/repos/afsallais/CALNEDER_DASH/contents/revision-plan.json";
+function githubApiHeaders(token){
+ return {"Accept":"application/vnd.github+json","Authorization":"Bearer "+token,"X-GitHub-Api-Version":"2022-11-28"};
+}
+async function readGithubPlan(token){
+ var response=await fetch(GITHUB_PLAN_URL+"?ref=main",{headers:githubApiHeaders(token)});
+ if(response.status===404)return {plan:{weeks:{}},sha:null};
+ if(!response.ok)throw new Error("Could not read the GitHub plan file.");
+ var file=await response.json(),bytes=Uint8Array.from(atob(file.content.replace(/\s/g,"")),function(c){return c.charCodeAt(0)});
+ var plan=JSON.parse(new TextDecoder().decode(bytes));
+ if(!plan.weeks||typeof plan.weeks!=="object")plan.weeks={};
+ return {plan:plan,sha:file.sha};
+}
+function encodeGithubPlan(plan){
+ var bytes=new TextEncoder().encode(JSON.stringify(plan,null,2)),binary="";
+ for(var i=0;i<bytes.length;i++)binary+=String.fromCharCode(bytes[i]);
+ return btoa(binary);
+}
+function scheduleGithubPlanSync(delay){
+ if(!githubPlanToken)return;
+ clearTimeout(githubSyncTimer);
+ $("revisionSyncStatus").textContent="Changes saved here; syncing to GitHub…";
+ githubSyncTimer=setTimeout(syncGithubPlan,delay===undefined?900:delay);
+}
+async function syncGithubPlan(){
+ if(!githubPlanToken)return;
+ if(githubSyncBusy){githubSyncAgain=true;return}
+ githubSyncBusy=true;
+ try{
+  $("revisionSyncStatus").textContent="Syncing plan to GitHub…";
+  var saved=false;
+  for(var attempt=0;attempt<2&&!saved;attempt++){
+   var remote=await readGithubPlan(githubPlanToken);
+   remote.plan.weeks[localDateKey(weekStart)]=REVISION_PLAN;
+   var payload={message:"Update weekly revision plan",content:encodeGithubPlan(remote.plan),branch:"main"};
+   if(remote.sha)payload.sha=remote.sha;
+   var put=await fetch(GITHUB_PLAN_URL,{method:"PUT",headers:githubApiHeaders(githubPlanToken),body:JSON.stringify(payload)});
+   if(put.ok)saved=true;
+   else if(attempt===1)throw new Error("GitHub could not save the plan. Check token permissions and try again.");
+  }
+  if(saved)$("revisionSyncStatus").textContent="Synced to the public GitHub repo.";
+ }catch(e){
+  $("revisionSyncStatus").textContent="GitHub sync failed. Your browser copy is still saved.";
+ }finally{
+  githubSyncBusy=false;
+  if(githubSyncAgain){githubSyncAgain=false;scheduleGithubPlanSync(0)}
+ }
+}
+$("githubPlanConnect").onclick=async function(){
+ var token=$("githubPlanToken").value.trim();
+ if(!token){$("revisionSyncStatus").textContent="Paste a fine-grained token to connect.";return}
+ var button=$("githubPlanConnect");button.disabled=true;
+ $("revisionSyncStatus").textContent="Checking GitHub access…";
+ try{
+  var check=await fetch("https://api.github.com/repos/afsallais/CALNEDER_DASH",{headers:githubApiHeaders(token)});
+  if(!check.ok)throw new Error("Token cannot access this repository.");
+  var repo=await check.json();
+  if(!repo.permissions||!repo.permissions.push)throw new Error("Token needs Contents write permission.");
+  githubPlanToken=token;
+  var remote=await readGithubPlan(token),remoteWeek=remote.plan.weeks[localDateKey(weekStart)];
+  if(Array.isArray(remoteWeek)){
+   REVISION_PLAN=remoteWeek;
+   try{localStorage.setItem(revisionKey,JSON.stringify(REVISION_PLAN))}catch(e){}
+   renderRevisionPlan();
+   $("revisionSyncStatus").textContent="Connected. Loaded this week's plan from GitHub.";
+  }else{
+   $("revisionSyncStatus").textContent="Connected. Saving this week's browser plan to GitHub…";
+   scheduleGithubPlanSync(0);
+  }
+  $("githubPlanToken").value="";
+ }catch(e){
+  githubPlanToken="";
+  $("revisionSyncStatus").textContent="Could not connect. Check the token and its repository permission.";
+ }finally{button.disabled=false}
+};
+$("githubPlanDisconnect").onclick=function(){
+ clearTimeout(githubSyncTimer);githubPlanToken="";$("revisionSyncStatus").textContent="Disconnected. Your browser copy remains saved.";
+};
+window.addEventListener("storage",function(e){
+ if(e.key===revisionKey&&e.newValue){try{REVISION_PLAN=JSON.parse(e.newValue);renderRevisionPlan();scheduleGithubPlanSync()}catch(err){}}
+});
+
 
 // Manual editing
 $("loc").onclick=function(){
