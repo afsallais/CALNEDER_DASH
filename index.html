@@ -92,8 +92,8 @@ html.color .focus-card.complete .focus-label,html.color .focus-card.complete .fo
 .focus-card{border:1px solid var(--line);border-radius:12px;padding:10px;text-align:center;transition:background-color .2s ease}
 .focus-card.running{background:#cfe7cb;border-color:#729b6e;color:#1d341e}
 .focus-card.running .focus-label,.focus-card.running .focus-status{color:#365536}
-.focus-card.complete{animation:focusDone 1.4s ease-in-out 1}
-@keyframes focusDone{0%,50%,100%{background:#f6caca}25%,75%{background:#e99a9a}}
+.focus-card.complete{animation:focusDone 2.5s steps(1,end) 1}
+@keyframes focusDone{0%,20%,40%,60%,80%,100%{background:#f6caca}10%,30%,50%,70%,90%{background:#e99a9a}}
 .focus-duration{margin:5px auto 2px;padding:4px 8px;border:1px solid var(--line);border-radius:7px;background:var(--bezel);color:var(--ink);font:inherit;font-size:11px}
 .focus-label{color:var(--mute);font-size:10px;font-weight:700;letter-spacing:.12em}
 .focus-time{font-size:38px;line-height:1.1;font-weight:700;font-variant-numeric:tabular-nums;margin:3px 0 7px}
@@ -163,7 +163,7 @@ html.color .focus-card.complete .focus-label,html.color .focus-card.complete .fo
         <line class="sh" id="as" x1="100" y1="112" x2="100" y2="22"/>
         <circle class="dot" cx="100" cy="100" r="5"/>
       </svg>
-      <div class="time" id="time">--:--</div></div><div class="clockbox"><div class="clocklabel">INDIA · IST</div><svg class="analog" id="analogIn" viewBox="0 0 200 200" aria-label="India analog clock"><circle class="face" cx="100" cy="100" r="94"/><g id="ticksIn"></g><line class="hh" id="aih" x1="100" y1="100" x2="100" y2="58"/><line class="mh2" id="aim" x1="100" y1="100" x2="100" y2="30"/><line class="sh" id="ais" x1="100" y1="112" x2="100" y2="22"/><circle class="dot" cx="100" cy="100" r="5"/></svg><div class="time" id="timeIn">--:--</div></div></div>
+      <div class="time" id="time">--:--</div></div><div class="clockbox"><div class="clocklabel">NEW DELHI · IST</div><svg class="analog" id="analogIn" viewBox="0 0 200 200" aria-label="New Delhi analog clock"><circle class="face" cx="100" cy="100" r="94"/><g id="ticksIn"></g><line class="sunrise-mark" id="riseMarkerIn" x1="100" y1="3" x2="100" y2="15"><title>New Delhi sunrise</title></line><line class="sunset-mark" id="setMarkerIn" x1="100" y1="3" x2="100" y2="15"><title>New Delhi sunset</title></line><line class="hh" id="aih" x1="100" y1="100" x2="100" y2="58"/><line class="mh2" id="aim" x1="100" y1="100" x2="100" y2="30"/><line class="sh" id="ais" x1="100" y1="112" x2="100" y2="22"/><circle class="dot" cx="100" cy="100" r="5"/></svg><div class="time" id="timeIn">--:--</div></div></div>
       <div class="wx"><svg id="icon" viewBox="0 0 64 64"></svg>
         <div><div class="temp" id="temp">--°C</div><div class="cond" id="cond">—</div></div></div>
 
@@ -346,8 +346,9 @@ function renderWx(quiet){
  renderForecast();
  positionSolarMarkers();
 }
+var INDIA_SUN={rise:"",set:""};
 function positionSolarMarkers(){
- [["riseMarker",S.rise],["setMarker",S.set]].forEach(function(item){
+ [["riseMarker",S.rise],["setMarker",S.set],["riseMarkerIn",INDIA_SUN.rise],["setMarkerIn",INDIA_SUN.set]].forEach(function(item){
   var p=String(item[1]||"").split(":");
   if(p.length!==2)return;
   var h=Number(p[0]),m=Number(p[1]);
@@ -526,6 +527,17 @@ function locate(){
  },fallback,{timeout:10000,maximumAge:600000});
 }
 locate();setInterval(locate,15*60*1000);
+async function loadIndiaSunTimes(){
+ try{
+  var r=await fetch("https://api.open-meteo.com/v1/forecast?latitude=28.6139&longitude=77.2090&daily=sunrise,sunset&forecast_days=1&timezone=Asia%2FKolkata");
+  if(!r.ok)throw new Error("India sun times unavailable");
+  var d=await r.json();
+  INDIA_SUN.rise=d.daily.sunrise[0].slice(11,16);
+  INDIA_SUN.set=d.daily.sunset[0].slice(11,16);
+  positionSolarMarkers();
+ }catch(e){}
+}
+loadIndiaSunTimes();setInterval(loadIndiaSunTimes,6*60*60*1000);
 
 
 
@@ -563,7 +575,7 @@ $("focusToggle").onclick=function(){
     clearInterval(focusInterval);focusInterval=null;focusRemaining=0;
     card.classList.remove("running");card.classList.add("complete");
     setFocusStatus("Session complete — take a short break.");
-    focusFlashTimer=setTimeout(function(){card.classList.remove("complete")},1450);
+    focusFlashTimer=setTimeout(function(){card.classList.remove("complete")},2550);
    }
    showFocusTime();
   },1000);
