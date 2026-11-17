@@ -76,7 +76,12 @@ html.inv{--paper:#050505;--card:#0b0b0b;--ink:#e8e8e4;--mute:#9a9a95;--line:#4a4
 .study-desk{margin-top:14px;padding-top:12px;border-top:1.5px solid var(--line)}
 .study-head,.tasks-head{display:flex;align-items:center;justify-content:space-between}
 .study-head{color:var(--mute);font-size:12px;font-weight:700;letter-spacing:.12em;margin-bottom:8px}
-.focus-card{border:1px solid var(--line);border-radius:12px;padding:10px;text-align:center}
+.focus-card{border:1px solid var(--line);border-radius:12px;padding:10px;text-align:center;transition:background-color .2s ease}
+.focus-card.running{background:#e7f4e5;border-color:#a4c7a0;color:#243b24}
+.focus-card.running .focus-label,.focus-card.running .focus-status{color:#456345}
+.focus-card.complete{animation:focusDone 1.4s ease-in-out 1}
+@keyframes focusDone{0%,50%,100%{background:#fff0f0}25%,75%{background:#f4c7c7}}
+.focus-duration{margin:5px auto 2px;padding:4px 8px;border:1px solid var(--line);border-radius:7px;background:var(--bezel);color:var(--ink);font:inherit;font-size:11px}
 .focus-label{color:var(--mute);font-size:10px;font-weight:700;letter-spacing:.12em}
 .focus-time{font-size:38px;line-height:1.1;font-weight:700;font-variant-numeric:tabular-nums;margin:3px 0 7px}
 .focus-actions{display:flex;justify-content:center;gap:7px}
@@ -174,7 +179,11 @@ html.inv{--paper:#050505;--card:#0b0b0b;--ink:#e8e8e4;--mute:#9a9a95;--line:#4a4
       <div class="study-head"><span>STUDY DESK</span><span id="studyDate"></span></div>
       <div class="focus-card">
         <div class="focus-label">FOCUS SESSION</div>
-        <div class="focus-time" id="focusTime">25:00</div>
+        <select class="focus-duration" id="focusDuration" aria-label="Focus session length">
+          <option value="10">10 minutes</option><option value="20" selected>20 minutes</option>
+          <option value="30">30 minutes</option><option value="60">1 hour</option>
+        </select>
+        <div class="focus-time" id="focusTime">20:00</div>
         <div class="focus-actions"><button id="focusToggle">Start focus</button><button id="focusReset">Reset</button></div>
         <div class="focus-status" id="focusStatus">A quiet 25-minute study sprint.</div>
       </div>
@@ -479,28 +488,48 @@ locate();setInterval(locate,15*60*1000);
 
 
 // ===== LOCAL STUDY DESK =====
-var FOCUS_LENGTH=25*60,focusRemaining=FOCUS_LENGTH,focusInterval=null;
+var focusLength=20*60,focusRemaining=focusLength,focusInterval=null,focusFlashTimer=null;
 function showFocusTime(){
  var m=Math.floor(focusRemaining/60),s=focusRemaining%60;
  $("focusTime").textContent=String(m).padStart(2,"0")+":"+String(s).padStart(2,"0");
  $("focusToggle").textContent=focusInterval?"Pause":"Start focus";
 }
+function setFocusStatus(text){$("focusStatus").textContent=text}
+function resetFocusSession(message){
+ clearInterval(focusInterval);clearTimeout(focusFlashTimer);
+ focusInterval=null;focusRemaining=focusLength;
+ var card=document.querySelector(".focus-card");card.classList.remove("running","complete");
+ setFocusStatus(message);showFocusTime();
+}
 $("studyDate").textContent=new Date().toLocaleDateString("en",{weekday:"short",day:"numeric",month:"short"}).toUpperCase();
+$("focusDuration").onchange=function(){
+ focusLength=Number(this.value)*60;
+ resetFocusSession("Ready for a "+this.options[this.selectedIndex].text+" focus session.");
+};
 $("focusToggle").onclick=function(){
- if(focusInterval){clearInterval(focusInterval);focusInterval=null;$("focusStatus").textContent="Paused — ready when you are."}
- else{
-  $("focusStatus").textContent="One task at a time. You've got this.";
+ var card=document.querySelector(".focus-card");
+ if(focusInterval){
+  clearInterval(focusInterval);focusInterval=null;card.classList.remove("running");
+  setFocusStatus("Paused — ready when you are.");
+ }else{
+  clearTimeout(focusFlashTimer);card.classList.remove("complete");
+  if(focusRemaining<=0)focusRemaining=focusLength;
+  card.classList.add("running");setFocusStatus("One task at a time. You've got this.");
   focusInterval=setInterval(function(){
    focusRemaining--;
-   if(focusRemaining<=0){clearInterval(focusInterval);focusInterval=null;focusRemaining=FOCUS_LENGTH;$("focusStatus").textContent="Sprint complete — take a short break."}
+   if(focusRemaining<=0){
+    clearInterval(focusInterval);focusInterval=null;focusRemaining=0;
+    card.classList.remove("running");card.classList.add("complete");
+    setFocusStatus("Session complete — take a short break.");
+    focusFlashTimer=setTimeout(function(){card.classList.remove("complete")},1450);
+   }
    showFocusTime();
   },1000);
  }
  showFocusTime();
 };
 $("focusReset").onclick=function(){
- clearInterval(focusInterval);focusInterval=null;focusRemaining=FOCUS_LENGTH;
- $("focusStatus").textContent="A quiet 25-minute study sprint.";showFocusTime();
+ resetFocusSession("Ready for a "+$("focusDuration").options[$("focusDuration").selectedIndex].text+" focus session.");
 };
 var STUDY_TASKS=[];
 try{STUDY_TASKS=JSON.parse(localStorage.getItem("eink-study-tasks")||"[]")}catch(e){}
