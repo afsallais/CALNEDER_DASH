@@ -77,16 +77,17 @@ html.inv{--paper:#050505;--card:#0b0b0b;--ink:#e8e8e4;--mute:#9a9a95;--line:#4a4
 .study-head,.tasks-head{display:flex;align-items:center;justify-content:space-between}
 .study-head{color:var(--mute);font-size:12px;font-weight:700;letter-spacing:.12em;margin-bottom:8px}
 .focus-card{border:1px solid var(--line);border-radius:12px;padding:10px;text-align:center;transition:background-color .2s ease}
-.focus-card.running{background:#e7f4e5;border-color:#a4c7a0;color:#243b24}
-.focus-card.running .focus-label,.focus-card.running .focus-status{color:#456345}
+.focus-card.running{background:#cfe7cb;border-color:#729b6e;color:#1d341e}
+.focus-card.running .focus-label,.focus-card.running .focus-status{color:#365536}
 .focus-card.complete{animation:focusDone 1.4s ease-in-out 1}
-@keyframes focusDone{0%,50%,100%{background:#fff0f0}25%,75%{background:#f4c7c7}}
+@keyframes focusDone{0%,50%,100%{background:#f6caca}25%,75%{background:#e99a9a}}
 .focus-duration{margin:5px auto 2px;padding:4px 8px;border:1px solid var(--line);border-radius:7px;background:var(--bezel);color:var(--ink);font:inherit;font-size:11px}
 .focus-label{color:var(--mute);font-size:10px;font-weight:700;letter-spacing:.12em}
 .focus-time{font-size:38px;line-height:1.1;font-weight:700;font-variant-numeric:tabular-nums;margin:3px 0 7px}
 .focus-actions{display:flex;justify-content:center;gap:7px}
 .focus-actions button,.task-form button{background:none;border:1.5px solid var(--line);color:var(--ink);border-radius:8px;padding:6px 12px;font:inherit;font-size:12px;font-weight:600;cursor:pointer}
 .focus-actions button:first-child{background:var(--ink);color:var(--paper)}
+.focus-card.running .focus-actions button:not(:first-child){color:#1d341e;background:#f3faf1;border-color:#638b61}
 .focus-status{font-size:10px;color:var(--mute);margin-top:6px;min-height:1.3em}
 .tasks-head{font-size:13px;margin:12px 0 6px}
 .tasks-count{color:var(--mute);font-size:11px}
