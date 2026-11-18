@@ -88,7 +88,8 @@ html.color .focus-card.complete .focus-label,html.color .focus-card.complete .fo
 .display-menu button[hidden]{display:none}
 .menu-separator{height:1px;background:var(--line);margin:5px 4px}
 .display-menu button{display:block;width:100%;text-align:left;padding:9px 10px;border:0;border-radius:7px;background:transparent;color:var(--ink);font:inherit;font-size:13px;cursor:pointer}
-.display-menu button:hover,.display-menu button:focus-visible,.display-menu button[aria-pressed="true"]{background:var(--bezel)}
+.display-menu button:hover,.display-menu button:focus-visible,.display-menu button[aria-pressed="true"],.display-menu a:hover,.display-menu a:focus-visible{background:var(--bezel)}
+.display-menu a{display:block;width:100%;text-align:left;padding:9px 10px;border-radius:7px;color:var(--ink);text-decoration:none;font:inherit;font-size:13px}
 .analog .sunrise-mark{stroke:var(--sunrise)}
 .analog .sunset-mark{stroke:var(--sunset)}
 .study-desk{margin-top:14px;padding-top:12px;border-top:1.5px solid var(--line)}
@@ -166,6 +167,7 @@ html.color .focus-card.complete .focus-label,html.color .focus-card.complete .fo
     <div class="display-menu" id="displayMenu" role="menu" hidden>
       <button id="colorToggle" type="button" role="menuitemcheckbox" aria-checked="false">Color version</button>
       <button id="inv" type="button" role="menuitemcheckbox" aria-checked="false" title="Invert display (I)">Invert display</button>
+      <a href="./mobile.html" role="menuitem">Mobile task list</a>
       <div class="menu-separator" aria-hidden="true"></div>
       <button id="cloudAuthButton" type="button" role="menuitem">Sign in to sync</button>
       <button id="cloudCopyUid" type="button" role="menuitem" hidden>Copy UID</button>
@@ -232,7 +234,7 @@ html.color .focus-card.complete .focus-label,html.color .focus-card.complete .fo
         <div class="focus-actions"><button id="focusToggle">Start focus</button><button id="focusReset">Reset</button></div>
         <div class="focus-status" id="focusStatus">A quiet 25-minute study sprint.</div>
       </div>
-      <div class="tasks-head"><strong>Today's priorities</strong><a class="task-open-link" href="./tasks.html">Manage tasks</a><span class="tasks-count" id="taskCount">0 done</span></div>
+      <div class="tasks-head"><strong>Today's priorities</strong><a class="task-open-link" href="./mobile.html">Manage tasks</a><span class="tasks-count" id="taskCount">0 done</span></div>
       <form class="task-form" id="taskForm"><input id="taskInput" maxlength="80" placeholder="Add a study task" aria-label="Add a study task"><button type="submit">Add</button></form>
       <ul class="task-list" id="taskList"></ul>
     </div>
