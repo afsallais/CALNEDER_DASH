@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#eaf2f5">
+<title>Study Tasks · Calendar Dash</title>
+<style>
+:root{color-scheme:light;--bg:#eaf2f5;--card:#f8fbfa;--ink:#20343d;--muted:#5d7077;--line:#bacbd0;--blue:#dcebf2;--green:#e5f2dc;--accent:#315b6c}
+*{box-sizing:border-box}
+body{margin:0;min-height:100vh;padding:env(safe-area-inset-top) 14px env(safe-area-inset-bottom);background:var(--bg);color:var(--ink);font-family:system-ui,-apple-system,"Segoe UI",sans-serif}
+main{width:min(100%,620px);margin:0 auto;padding:18px 0 30px}
+header{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:16px}
+.top-actions{position:relative;display:flex;align-items:center;gap:8px}
+.more{width:42px;height:42px;border:1px solid var(--line);border-radius:12px;background:var(--card);color:var(--ink);font-size:24px;line-height:1;cursor:pointer}
+.more-menu{position:absolute;z-index:5;right:0;top:48px;min-width:165px;padding:6px;background:var(--card);border:1px solid var(--line);border-radius:12px;box-shadow:0 6px 20px #30434a22}
+.more-menu[hidden]{display:none}
+.more-menu button{width:100%;min-height:44px;border:0;border-radius:8px;padding:9px 11px;background:transparent;color:var(--ink);text-align:left;font-weight:650;cursor:pointer}
+.back{color:var(--accent);text-decoration:none;font-weight:650;font-size:14px}
+h1{font-size:clamp(24px,7vw,34px);line-height:1.15;margin:0 0 5px}
+.subtitle{color:var(--muted);font-size:14px}
+.account{display:flex;align-items:center;gap:8px;margin:16px 0 12px}
+button,input{font:inherit}
+.account button,.add-form button,.edit-actions button{min-height:44px;border:1px solid var(--line);border-radius:12px;padding:9px 13px;background:var(--accent);color:white;font-weight:700;cursor:pointer;touch-action:manipulation}
+.status{color:var(--muted);font-size:12px;flex:1;line-height:1.4}
+.panel{background:var(--blue);border:1px solid var(--line);border-radius:20px;padding:18px;box-shadow:0 6px 20px #30434a12}
+.list-head{display:flex;align-items:baseline;justify-content:space-between;gap:12px;margin:0 0 12px}
+.list-head h2{font-size:19px;margin:0}
+.count{color:var(--muted);font-size:13px;white-space:nowrap}
+.add-form{display:flex;gap:8px;margin-bottom:14px}
+.add-form input,.edit-input{min-width:0;width:100%;min-height:48px;border:1px solid var(--line);border-radius:12px;background:#fff;color:var(--ink);padding:10px 12px;font-size:16px}
+.add-form button{flex:0 0 auto;min-width:64px}
+ul{list-style:none;margin:0;padding:0;display:grid;gap:8px}
+.task{display:flex;align-items:center;gap:10px;min-width:0;padding:10px;border:1px solid var(--line);border-radius:14px;background:var(--card)}
+.task-check{width:22px;height:22px;flex:0 0 auto;accent-color:#426b4c}
+.task-text{min-width:0;flex:1;overflow-wrap:anywhere;font-size:15px;line-height:1.4}
+.task.done .task-text{text-decoration:line-through;color:var(--muted)}
+.task-actions{display:flex;gap:5px;flex:0 0 auto}
+.icon-button{width:42px;height:42px;border:1px solid transparent;border-radius:11px;background:transparent;color:var(--accent);font-size:14px;font-weight:700;cursor:pointer;touch-action:manipulation}
+.icon-button:hover,.icon-button:focus-visible{border-color:var(--line);background:var(--green)}
+.icon-button.remove{color:#8b3939;font-size:21px}
+.edit-form{width:100%;display:grid;gap:8px}
+.edit-actions{display:flex;justify-content:flex-end;gap:8px}
+.edit-actions button{min-height:40px}
+.edit-actions .cancel{background:var(--card);color:var(--ink)}
+.empty{padding:22px 12px;text-align:center;color:var(--muted);background:var(--card);border:1px dashed var(--line);border-radius:14px;font-size:14px}
+.hint{margin:12px 2px 0;color:var(--muted);font-size:12px;line-height:1.5}
+@media (max-width:380px){body{padding-left:10px;padding-right:10px}.panel{padding:14px}.task{gap:7px;padding:8px}.icon-button{width:38px}}
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <a class="back" href="./">← Dashboard</a>
+    <div class="top-actions">
+      <span id="today"></span>
+      <button id="menuToggle" class="more" type="button" aria-label="More options" aria-expanded="false">⋮</button>
+      <div id="accountMenu" class="more-menu" hidden>
+        <button id="authButton" type="button">Sign in to sync</button>
+      </div>
+    </div>
+  </header>
+  <section class="panel" aria-labelledby="title">
+    <h1 id="title">Study tasks</h1>
+    <div class="subtitle">Keep today’s next steps in one simple list.</div>
+    <div class="account">
+      <span class="status" id="status" role="status" aria-live="polite">Saved on this device</span>
+    </div>
+    <div class="list-head"><h2>Today’s priorities</h2><span id="count" class="count">0 / 0 done</span></div>
+    <form id="addForm" class="add-form">
+      <input id="newTask" maxlength="80" placeholder="Add a study task" aria-label="New study task" required>
+      <button type="submit">Add</button>
+    </form>
+    <ul id="taskList" aria-label="Study tasks"></ul>
+    <p class="hint">Sign in with the same Google account on each device to keep this list in sync.</p>
+  </section>
+</main>
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/13.3.0/firebase-app.js";
+import { getAuth, GoogleAuthProvider, onAuthStateChanged, signInWithPopup, signOut } from "https://www.gstatic.com/firebasejs/13.3.0/firebase-auth.js";
+import { getFirestore, doc, getDoc, setDoc, onSnapshot, serverTimestamp } from "https://www.gstatic.com/firebasejs/13.3.0/firebase-firestore.js";
+
+const firebaseConfig = {
+  apiKey: "AIzaSyC_NUvfTkLrVqcZRz-lgyeL0y4UpBqiSPc",
+  authDomain: "calenderdash-9ed0b.firebaseapp.com",
+  projectId: "calenderdash-9ed0b",
+  storageBucket: "calenderdash-9ed0b.firebasestorage.app",
+  messagingSenderId: "39149780870",
+  appId: "1:39149780870:web:fa92080191eb6b40787607"
+};
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+const db = getFirestore(app);
+const authButton = document.getElementById("authButton");
+const statusEl = document.getElementById("status");
+const list = document.getElementById("taskList");
+let tasks = [];
+let activeUid = null;
+let cloudReady = false;
+let stopWatch = null;
+let editing = -1;
+
+try{tasks=JSON.parse(localStorage.getItem("eink-study-tasks")||"[]");if(!Array.isArray(tasks))tasks=[]}catch(e){}
+document.getElementById("today").textContent = new Date().toLocaleDateString(undefined,{weekday:"short",month:"short",day:"numeric"});
+function setStatus(text){statusEl.textContent=text}
+function taskRef(uid){return doc(db,"users",uid,"dashboard","studyTasks")}
+function render(){
+  list.innerHTML="";
+  const done=tasks.filter(task=>task.done).length;
+  document.getElementById("count").textContent=done+" / "+tasks.length+" done";
+  if(!tasks.length){
+    const empty=document.createElement("li");empty.className="empty";empty.textContent="No tasks yet. Add one small next step.";list.appendChild(empty);return;
+  }
+  tasks.forEach((task,index)=>{
+    const row=document.createElement("li");row.className="task"+(task.done?" done":"");
+    if(editing===index){
+      const form=document.createElement("form");form.className="edit-form";
+      const input=document.createElement("input");input.className="edit-input";input.maxLength=80;input.value=task.text;input.setAttribute("aria-label","Edit task");input.required=true;
+      const actions=document.createElement("div");actions.className="edit-actions";
+      const cancel=document.createElement("button");cancel.type="button";cancel.className="cancel";cancel.textContent="Cancel";cancel.onclick=()=>{editing=-1;render()};
+      const save=document.createElement("button");save.type="submit";save.textContent="Save";
+      actions.append(cancel,save);form.append(input,actions);
+      form.onsubmit=event=>{event.preventDefault();const value=input.value.trim();if(!value)return;tasks[index].text=value;editing=-1;saveTasks()};
+      row.appendChild(form);
+    }else{
+      const check=document.createElement("input");check.type="checkbox";check.className="task-check";check.checked=!!task.done;check.setAttribute("aria-label","Mark "+task.text+" complete");
+      check.onchange=()=>{tasks[index].done=check.checked;saveTasks()};
+      const label=document.createElement("span");label.className="task-text";label.textContent=task.text;
+      const actions=document.createElement("div");actions.className="task-actions";
+      const edit=document.createElement("button");edit.type="button";edit.className="icon-button";edit.textContent="Edit";edit.setAttribute("aria-label","Edit "+task.text);edit.onclick=()=>{editing=index;render();const field=list.querySelector(".edit-input");if(field){field.focus();field.select()}};
+      const remove=document.createElement("button");remove.type="button";remove.className="icon-button remove";remove.textContent="×";remove.setAttribute("aria-label","Remove "+task.text);remove.onclick=()=>{tasks.splice(index,1);editing=-1;saveTasks()};
+      actions.append(edit,remove);row.append(check,label,actions);
+    }
+    list.appendChild(row);
+  });
+}
+function applyCloud(items){
+  tasks=Array.isArray(items)?items:[];
+  try{localStorage.setItem("eink-study-tasks",JSON.stringify(tasks))}catch(e){}
+  editing=-1;render();
+}
+function saveTasks(){
+  try{localStorage.setItem("eink-study-tasks",JSON.stringify(tasks))}catch(e){}
+  render();
+  window.dispatchEvent(new CustomEvent("mobile-tasks-save",{detail:{items:tasks}}));
+}
+document.getElementById("addForm").onsubmit=event=>{
+  event.preventDefault();const input=document.getElementById("newTask");const value=input.value.trim();if(!value)return;
+  tasks.push({text:value,done:false});input.value="";saveTasks();
+};
+async function connectUser(user){
+  activeUid=user.uid;cloudReady=false;
+  if(stopWatch)stopWatch();
+  authButton.textContent="Sign out";setStatus("Connecting your tasks…");
+  const ref=taskRef(user.uid);
+  try{
+    const snapshot=await getDoc(ref);
+    if(activeUid!==user.uid)return;
+    if(snapshot.exists())applyCloud(snapshot.data().items);
+    else await setDoc(ref,{items:tasks,updatedAt:serverTimestamp()});
+    if(activeUid!==user.uid)return;
+    cloudReady=true;setStatus("Cloud sync is on");
+    stopWatch=onSnapshot(ref,value=>{if(activeUid===user.uid&&value.exists())applyCloud(value.data().items)},()=>setStatus("Sync issue — changes remain saved on this device"));
+  }catch(error){
+    cloudReady=false;const code=error&&error.code?error.code:"unknown";const detail=error&&error.message?error.message:"";
+    setStatus("Firestore connection failed ("+code+")"+(detail?": "+detail.slice(0,140):""));
+  }
+}
+authButton.onclick=async()=>{
+  document.getElementById("accountMenu").hidden=true;
+  document.getElementById("menuToggle").setAttribute("aria-expanded","false");
+  if(auth.currentUser){try{await signOut(auth)}catch(e){setStatus("Could not sign out")}return}
+  try{await signInWithPopup(auth,new GoogleAuthProvider())}
+  catch(error){
+    const messages={"auth/unauthorized-domain":"Add afsallais.github.io to Firebase Authorized domains","auth/popup-blocked":"Allow pop-ups for this page, then try again","auth/operation-not-allowed":"Enable Google sign-in in Firebase Authentication"};
+    setStatus(messages[error.code]||"Sign-in failed — check Firebase Authentication setup");
+  }
+};
+document.getElementById("menuToggle").onclick=event=>{
+  event.stopPropagation();
+  const menu=document.getElementById("accountMenu");
+  menu.hidden=!menu.hidden;
+  document.getElementById("menuToggle").setAttribute("aria-expanded",String(!menu.hidden));
+};
+document.addEventListener("click",event=>{
+  if(!event.target.closest(".top-actions")){
+    document.getElementById("accountMenu").hidden=true;
+    document.getElementById("menuToggle").setAttribute("aria-expanded","false");
+  }
+});
+onAuthStateChanged(auth,user=>{
+  if(!user){activeUid=null;cloudReady=false;if(stopWatch)stopWatch();stopWatch=null;authButton.textContent="Sign in to sync";setStatus("Saved on this device")}
+  else connectUser(user);
+});
+window.addEventListener("mobile-tasks-save",event=>{
+  if(!cloudReady||!activeUid)return;
+  const ref=taskRef(activeUid);const items=Array.isArray(event.detail.items)?event.detail.items:[];
+  setDoc(ref,{items,updatedAt:serverTimestamp()}).catch(error=>{setStatus("Sync issue — changes remain saved on this device");console.error("Task sync failed:",error)});
+});
+render();
+</script>
+</body>
+</html>
