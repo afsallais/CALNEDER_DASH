@@ -751,8 +751,16 @@ function applyTasks(items){
   try{ localStorage.setItem("eink-study-tasks", JSON.stringify(window.STUDY_TASKS)); }catch(e){}
   window.renderStudyTasks();
 }
-function applyPlan(items){
-  window.REVISION_PLAN = Array.isArray(items) ? items : [];
+function cloudPlanDays(items){
+  const days = {};
+  for(let i=0;i<7;i++) days[String(i)] = Array.isArray(items && items[i]) ? items[i] : [];
+  return days;
+}
+function localPlanFromCloud(days){
+  return Array.from({length:7}, (_,i) => Array.isArray(days && days[String(i)]) ? days[String(i)] : []);
+}
+function applyPlan(days){
+  window.REVISION_PLAN = localPlanFromCloud(days);
   try{ localStorage.setItem(window.revisionKey, JSON.stringify(window.REVISION_PLAN)); }catch(e){}
   window.renderRevisionPlan();
 }
@@ -774,7 +782,7 @@ async function connectUser(user){
     if(tasksDoc.exists()) applyTasks(tasksDoc.data().items);
     else await setDoc(taskRef(user.uid), {items:localTasks(), updatedAt:serverTimestamp()});
     if(planDoc.exists()) applyPlan(planDoc.data().items);
-    else await setDoc(planRef(user.uid, currentWeekKey), {items:localPlan(), updatedAt:serverTimestamp()});
+    else await setDoc(planRef(user.uid, currentWeekKey), {days:cloudPlanDays(localPlan()), updatedAt:serverTimestamp()});
     if(activeUid !== user.uid) return;
     cloudReady = true;
     setStatus("Cloud sync is on");
@@ -782,7 +790,7 @@ async function connectUser(user){
       if(activeUid === user.uid && snapshot.exists()) applyTasks(snapshot.data().items);
     }, error => setStatus("Sync issue — changes remain saved on this device"));
     stopPlanWatch = onSnapshot(planRef(user.uid, currentWeekKey), snapshot => {
-      if(activeUid === user.uid && snapshot.exists()) applyPlan(snapshot.data().items);
+      if(activeUid === user.uid && snapshot.exists()) applyPlan(snapshot.data().days);
     }, error => setStatus("Sync issue — changes remain saved on this device"));
   }catch(error){
     cloudReady = false;
@@ -848,7 +856,8 @@ window.addEventListener("dashboard-local-save", event => {
       ? planRef(activeUid, currentWeekKey) : null;
   if(!ref) return;
   const items = Array.isArray(detail.items) ? detail.items : [];
-  setDoc(ref, {items, updatedAt:serverTimestamp()}).catch(error => {
+  const payload = detail.kind === "revisionPlan" ? {days:cloudPlanDays(items), updatedAt:serverTimestamp()} : {items, updatedAt:serverTimestamp()};
+  setDoc(ref, payload).catch(error => {
     setStatus("Sync issue — changes remain saved on this device");
     console.error("Firestore save failed:", error);
   });
