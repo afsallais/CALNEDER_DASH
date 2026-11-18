@@ -133,6 +133,9 @@ html.color .focus-card.complete .focus-label,html.color .focus-card.complete .fo
 .revision-item span{overflow-wrap:anywhere;flex:1}
 .revision-item.done span{text-decoration:line-through;color:var(--mute)}
 .revision-item .task-remove{font-size:15px}
+.revision-move{flex:0 0 auto;border:1px solid transparent;border-radius:5px;background:transparent;color:var(--mute);font:inherit;font-size:13px;line-height:1;padding:3px 4px;cursor:pointer}
+.revision-move:hover:not(:disabled),.revision-move:focus-visible{color:var(--ink);border-color:var(--line);background:var(--card)}
+.revision-move:disabled{opacity:.3;cursor:default}
 .revision-priority{flex:0 0 auto;border:1px solid transparent;border-radius:6px;padding:3px 5px;background:transparent;color:#735c28;font:inherit;font-size:9px;font-weight:700;cursor:pointer}
 .revision-priority:hover,.revision-priority:focus-visible{border-color:#a89562;background:#fff7de}
 .revision-priority[aria-pressed="true"]{color:#852f26;background:#f6d4c2;border-color:#c77c66}
@@ -665,7 +668,11 @@ function renderRevisionPlan(){
     priority.onclick=function(){REVISION_PLAN[dayIndex][itemIndex].priority=!REVISION_PLAN[dayIndex][itemIndex].priority;saveRevisionPlan()};
     var remove=document.createElement("button");remove.type="button";remove.className="task-remove";remove.textContent="×";remove.setAttribute("aria-label","Remove "+item.topic+" from plan");
     remove.onclick=function(){REVISION_PLAN[dayIndex].splice(itemIndex,1);saveRevisionPlan()};
-    row.appendChild(check);row.appendChild(topic);row.appendChild(priority);row.appendChild(remove);list.appendChild(row);
+    var moveUp=document.createElement("button");moveUp.type="button";moveUp.className="revision-move";moveUp.textContent="↑";moveUp.disabled=itemIndex===0;moveUp.setAttribute("aria-label","Move "+item.topic+" up");moveUp.title="Move up";
+    moveUp.onclick=function(){var items=REVISION_PLAN[dayIndex],swap=items[itemIndex-1];items[itemIndex-1]=items[itemIndex];items[itemIndex]=swap;saveRevisionPlan()};
+    var moveDown=document.createElement("button");moveDown.type="button";moveDown.className="revision-move";moveDown.textContent="↓";moveDown.disabled=itemIndex===items.length-1;moveDown.setAttribute("aria-label","Move "+item.topic+" down");moveDown.title="Move down";
+    moveDown.onclick=function(){var items=REVISION_PLAN[dayIndex],swap=items[itemIndex+1];items[itemIndex+1]=items[itemIndex];items[itemIndex]=swap;saveRevisionPlan()};
+    row.appendChild(check);row.appendChild(topic);row.appendChild(priority);row.appendChild(moveUp);row.appendChild(moveDown);row.appendChild(remove);list.appendChild(row);
    });
    section.appendChild(list);
   }
