@@ -34,15 +34,18 @@ button,input,select{font:inherit}
 ul{list-style:none;margin:0;padding:0;display:grid;gap:7px}
 .task-row{display:flex;align-items:center;gap:9px;min-width:0;padding:8px;border:1px solid var(--line);border-radius:13px;background:var(--card)}
 .task-check,.revision-check{width:22px;height:22px;flex:0 0 auto;accent-color:#426b4c}
+.import-row{display:flex;align-items:center;gap:8px;margin:0 0 12px;flex-wrap:wrap}
+.import-button{min-height:40px;border:1px solid #83adbf;border-radius:10px;padding:7px 10px;background:#eaf4f8;color:#24536a;font-size:12px;font-weight:700;cursor:pointer}
+.import-status{flex:1;min-width:150px;color:var(--muted);font-size:11px}
 .task-text,.revision-topic{min-width:0;flex:1;overflow-wrap:anywhere;font-size:14px;line-height:1.35}
 .task-row.done .task-text,.revision-item.done .revision-topic{text-decoration:line-through;color:var(--muted)}
 .task-actions{display:flex;align-items:center;gap:2px;flex:0 0 auto}
 .icon-button{min-width:38px;min-height:38px;border:1px solid transparent;border-radius:9px;background:transparent;color:var(--accent);font-size:13px;font-weight:700;cursor:pointer;touch-action:manipulation}
 .icon-button:hover,.icon-button:focus-visible{border-color:var(--line);background:var(--yellow)}
 .icon-button.remove{color:#8b3939;font-size:20px}
-.task-priority{color:#7b5b1b!important}
-.task-row.priority{background:#fff4d4;border-color:#d9c58c}
-.high-label{display:inline-block;margin-left:5px;color:#795719;font-size:10px;font-weight:750;white-space:nowrap}
+.task-priority{color:#24658c!important}
+.task-row.priority{background:#dcebf2;border-color:#83adbf;border-left:3px solid #3b7a99;padding-left:5px}
+.high-label{display:inline-block;margin-left:5px;color:#24658c;font-size:10px;font-weight:750;white-space:nowrap}
 .empty{padding:18px 10px;text-align:center;color:var(--muted);background:var(--card);border:1px dashed var(--line);border-radius:13px;font-size:13px}
 .hint{margin:10px 2px 0;color:var(--muted);font-size:11px;line-height:1.45}
 .revision-panel{background:var(--yellow);border-color:#d7c593}
@@ -63,13 +66,13 @@ ul{list-style:none;margin:0;padding:0;display:grid;gap:7px}
 .revision-day-meta{font-size:10px;color:#71603f;font-weight:550;white-space:nowrap}
 .revision-items{display:grid;gap:5px}
 .revision-item{display:flex;align-items:center;gap:6px;min-width:0;padding:5px 4px;border-radius:9px}
-.revision-item.priority{background:#f6e1d3;border-left:3px solid #b34e39;padding-left:6px}
+.revision-item.priority{background:#dcebf2;border-left:3px solid #3b7a99;padding-left:6px}
 .revision-topic{font-size:12px;color:#483a20}
 .revision-item.done .revision-topic{color:#71603f}
 .revision-controls{display:flex;align-items:center;gap:0;flex:0 0 auto}
 .revision-controls button{min-width:31px;min-height:34px;padding:2px;border:0;border-radius:7px;background:transparent;color:#71603f;font-size:13px;font-weight:700;cursor:pointer;touch-action:manipulation}
 .revision-controls button:hover,.revision-controls button:focus-visible{background:#fff8de;color:#483a20}
-.revision-controls button[aria-pressed="true"]{color:#a13b2e}
+.revision-controls button[aria-pressed="true"]{color:#24658c}
 .revision-controls button:disabled{opacity:.35}
 .revision-edit-form{display:flex;align-items:center;gap:6px;flex:1;min-width:0}
 .revision-edit-form input{flex:1;min-width:0;min-height:40px;border:1px solid #c9b98f;border-radius:9px;padding:7px 9px;background:#fffdf6;color:#483a20;font-size:15px}
@@ -103,6 +106,11 @@ ul{list-style:none;margin:0;padding:0;display:grid;gap:7px}
       <input id="newTask" maxlength="80" placeholder="Add a study task" aria-label="New study task" required>
       <button class="primary-button" type="submit">Add</button>
     </form>
+    <div class="import-row">
+      <input id="timetableFile" type="file" accept=".ics,text/calendar" hidden>
+      <button id="importLectures" class="import-button" type="button">Import lectures (.ics)</button>
+      <span id="importStatus" class="import-status" role="status" aria-live="polite">Choose a downloaded TU Delft timetable file.</span>
+    </div>
     <ul id="taskList" aria-label="Study tasks"></ul>
   </section>
 
@@ -128,6 +136,7 @@ ul{list-style:none;margin:0;padding:0;display:grid;gap:7px}
 </main>
 
 <script type="module">
+import ICAL from "https://unpkg.com/ical.js@2.2.1/dist/ical.min.js";
 import { initializeApp } from "https://www.gstatic.com/firebasejs/13.3.0/firebase-app.js";
 import { getAuth, GoogleAuthProvider, onAuthStateChanged, signInWithPopup, signOut } from "https://www.gstatic.com/firebasejs/13.3.0/firebase-auth.js";
 import { getFirestore, doc, getDoc, setDoc, onSnapshot, serverTimestamp } from "https://www.gstatic.com/firebasejs/13.3.0/firebase-firestore.js";
@@ -187,6 +196,45 @@ function renderTasks(){
 function saveTasks(){try{localStorage.setItem("eink-study-tasks",JSON.stringify(tasks))}catch(e){}renderTasks();window.dispatchEvent(new CustomEvent("mobile-tasks-save",{detail:{items:tasks}}))}
 function applyTasks(items){tasks=Array.isArray(items)?items:[];try{localStorage.setItem("eink-study-tasks",JSON.stringify(tasks))}catch(e){}editingTask=-1;renderTasks()}
 document.getElementById("addForm").onsubmit=e=>{e.preventDefault();const input=document.getElementById("newTask"),text=input.value.trim();if(!text)return;tasks.push({text,done:false});input.value="";saveTasks()};
+document.getElementById("importLectures").onclick=()=>document.getElementById("timetableFile").click();
+document.getElementById("timetableFile").onchange=async event=>{
+  const file=event.target.files&&event.target.files[0];if(!file)return;
+  const result=document.getElementById("importStatus");result.textContent="Reading timetable…";
+  try{
+    const source=await file.text(),parsed=ICAL.parse(source);
+    function findCalendar(value){
+      if(Array.isArray(value)&&String(value[0]).toLowerCase()==="vcalendar")return value;
+      if(Array.isArray(value)){for(const child of value){const found=findCalendar(child);if(found)return found}}
+      return null;
+    }
+    const calendarData=findCalendar(parsed);if(!calendarData)throw new Error("This file does not contain a calendar.");
+    const calendar=new ICAL.Component(calendarData),events=calendar.getAllSubcomponents("vevent");
+    const now=new Date(),limit=new Date(now.getTime()+90*24*60*60*1000);
+    const known=new Set(tasks.map(task=>task.calendarEventId).filter(Boolean));let added=0;
+    for(const component of events){
+      const eventStatus=component.getFirstPropertyValue("status");
+      if(String(eventStatus||"").toUpperCase()==="CANCELLED")continue;
+      const summary=String(component.getFirstPropertyValue("summary")||"Lecture").replace(/\\n/g," ").trim();
+      const uid=String(component.getFirstPropertyValue("uid")||summary);
+      const startProperty=component.getFirstPropertyValue("dtstart");if(!startProperty)continue;
+      const expansion=new ICAL.RecurExpansion({component,dtstart:startProperty});
+      let occurrence,guard=0;
+      while((occurrence=expansion.next())&&guard++<2000){
+        const start=occurrence.toJSDate();if(start>limit)break;if(start<now)continue;
+        const startKey=occurrence.toString(),calendarEventId=uid+"|"+startKey;
+        if(known.has(calendarEventId))continue;
+        const when=start.toLocaleString(undefined,{weekday:"short",month:"short",day:"numeric",hour:"2-digit",minute:"2-digit"});
+        tasks.push({text:summary+" · "+when,done:false,priority:true,source:"tudelft-ical",calendarEventId});
+        known.add(calendarEventId);added++;
+      }
+    }
+    if(added)saveTasks();
+    result.textContent=added?added+" upcoming lecture/class tasks added as high priority.": "No new upcoming timetable events found.";
+  }catch(error){
+    console.error("Timetable import failed:",error);
+    result.textContent=error.message||"Could not read this timetable file.";
+  }finally{event.target.value=""}
+};
 function renderRevisionPlan(){
   const root=document.getElementById("revisionDays");root.innerHTML="";let total=0,done=0;
   weekDates.forEach((date,day)=>{
