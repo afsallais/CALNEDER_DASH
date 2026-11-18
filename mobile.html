@@ -81,14 +81,14 @@ ul{list-style:none;margin:0;padding:0;display:grid;gap:7px}
 .revision-empty{padding:3px 0 2px 22px;font-size:11px;color:#71603f}
 @media(max-width:380px){body{padding-left:9px;padding-right:9px}.panel{padding:13px}.revision-form{grid-template-columns:94px minmax(0,1fr) 51px;gap:5px}.revision-controls button{min-width:28px}.task-row{gap:6px;padding:7px}.icon-button{min-width:34px}}
 
-/* Manual high-priority revision tasks use red; timetable lectures use blue. */
+/* Manual high-priority tasks are red; imported timetable lectures are blue. */
+.task-row.priority{background:#f6e1d3;border-color:#d59b88;border-left:3px solid #b34e39;padding-left:5px}
+.task-priority[aria-pressed="true"]{color:#852f26!important}
+.task-high-label,.high-label{color:#852f26}
 .revision-item.priority:not(.ical-event){background:#f6e1d3;border-left:3px solid #b34e39;padding-left:6px}
 .revision-item.priority:not(.ical-event) .revision-controls button[aria-pressed="true"]{color:#852f26;background:#f6d4c2}
 .revision-item.ical-event{background:#dcebf2;border-left:3px solid #3b7a99;padding-left:6px}
 .revision-item.ical-event .revision-controls button[aria-pressed="true"]{color:#174e6b;background:#c9e3ee}
-.task-row.priority{background:#f6e1d3;border-color:#d59b88;border-left:3px solid #b34e39;padding-left:5px}
-.task-priority[aria-pressed="true"]{color:#852f26!important}
-.task-high-label,.high-label{color:#852f26}
 
 </style>
 </head>
@@ -167,6 +167,190 @@ document.getElementById("today").textContent=new Date().toLocaleDateString(undef
 function setStatus(text){statusEl.textContent=text}
 function taskRef(uid){return doc(db,"users",uid,"dashboard","studyTasks")}
 function planRef(uid,key){return doc(db,"users",uid,"revisionPlans",key)}
+function localDateKey(date){return date.getFullYear()+"-"+String(date.getMonth()+1).padStart(2,"0")+"-"+String(date.getDate()).padStart(2,"0")}
+let thisMonday=new Date();const mondayDay=thisMonday.getDay()||7;thisMonday.setDate(thisMonday.getDate()-mondayDay+1);thisMonday.setHours(0,0,0,0);
+let weekOffset=0,weekStart=new Date(thisMonday),weekDates=[],weekKey="",revisionPlan=[];
+function cloudPlanDays(items){const days={};for(let i=0;i<7;i++)days[String(i)]=Array.isArray(items&&items[i])?items[i]:[];return days}
+function localPlanFromCloud(days){return Array.from({length:7},(_,i)=>Array.isArray(days&&days[String(i)])?days[String(i)]:[])}
+function updateWeek(offset){
+  weekOffset=offset;weekStart=new Date(thisMonday);weekStart.setDate(weekStart.getDate()+7*offset);
+  weekDates=Array.from({length:7},(_,i)=>{const d=new Date(weekStart);d.setDate(d.getDate()+i);return d});
+  weekKey=localDateKey(weekStart);revisionPlan=[];
+  try{revisionPlan=JSON.parse(localStorage.getItem("eink-revision-plan-"+weekKey)||"[]");if(!Array.isArray(revisionPlan))revisionPlan=[]}catch(e){}
+  document.getElementById("weekLabel").textContent=weekDates[0].toLocaleDateString(undefined,{month:"short",day:"numeric"})+" – "+weekDates[6].toLocaleDateString(undefined,{month:"short",day:"numeric",year:"numeric"});
+  const picker=document.getElementById("revisionDay");picker.innerHTML="";
+  weekDates.forEach((date,index)=>{const option=document.createElement("option");option.value=String(index);option.textContent=date.toLocaleDateString(undefined,{weekday:"short",month:"short",day:"numeric"});picker.appendChild(option)});
+  document.getElementById("thisWeek").hidden=weekOffset===0;renderRevisionPlan();
+}
+function saveLocalPlan(){try{localStorage.setItem("eink-revision-plan-"+weekKey,JSON.stringify(revisionPlan))}catch(e){}}
+function renderTasks(){
+  taskList.innerHTML="";const done=tasks.filter(t=>t.done).length;
+  document.getElementById("taskCount").textContent=done+" / "+tasks.length+" done";
+  if(!tasks.length){const empty=document.createElement("li");empty.className="empty";empty.textContent="No tasks yet. Add one small next step.";taskList.appendChild(empty);return}
+  tasks.forEach((task,index)=>{
+    const row=document.createElement("li");row.className="task-row"+(task.done?" done":"")+(task.priority?" priority":"");
+    const check=document.createElement("input");check.type="checkbox";check.className="task-check";check.checked=!!task.done;check.setAttribute("aria-label","Mark "+task.text+" complete");check.onchange=()=>{tasks[index].done=check.checked;saveTasks()};
+    const text=document.createElement("span");text.className="task-text";text.textContent=task.text||"";
+    if(task.priority){const high=document.createElement("small");high.className="high-label";high.textContent="★ HIGH";text.appendChild(high)}
+    const actions=document.createElement("div");actions.className="task-actions";
+    const priority=document.createElement("button");priority.type="button";priority.className="icon-button task-priority";priority.textContent=task.priority?"★":"☆";priority.setAttribute("aria-label",task.priority?"Remove high priority":"Mark high priority");priority.setAttribute("aria-pressed",!!task.priority);priority.onclick=()=>{tasks[index].priority=!tasks[index].priority;saveTasks()};
+    const edit=document.createElement("button");edit.type="button";edit.className="icon-button";edit.textContent=editingTask===index?"Save":"Edit";edit.onclick=()=>{if(editingTask===index){const field=row.querySelector(".edit-input");const value=field&&field.value.trim();if(value){tasks[index].text=value;editingTask=-1;saveTasks()}}else{editingTask=index;renderTasks();const field=taskList.querySelector(".edit-input");if(field){field.focus();field.select()}}};
+    const remove=document.createElement("button");remove.type="button";remove.className="icon-button remove";remove.textContent="×";remove.setAttribute("aria-label","Remove "+task.text);remove.onclick=()=>{tasks.splice(index,1);editingTask=-1;saveTasks()};
+    if(editingTask===index){const field=document.createElement("input");field.className="edit-input";field.value=task.text;field.maxLength=80;field.setAttribute("aria-label","Edit task");row.append(check,field,actions);actions.append(priority,edit,remove);field.addEventListener("keydown",e=>{if(e.key==="Enter"){e.preventDefault();edit.click()}if(e.key==="Escape"){editingTask=-1;renderTasks()}})}
+    else row.append(check,text,actions),actions.append(priority,edit,remove);
+    taskList.appendChild(row);
+  });
+}
+function saveTasks(){try{localStorage.setItem("eink-study-tasks",JSON.stringify(tasks))}catch(e){}renderTasks();window.dispatchEvent(new CustomEvent("mobile-tasks-save",{detail:{items:tasks}}))}
+function applyTasks(items){tasks=Array.isArray(items)?items:[];try{localStorage.setItem("eink-study-tasks",JSON.stringify(tasks))}catch(e){}editingTask=-1;renderTasks()}
+document.getElementById("addForm").onsubmit=e=>{e.preventDefault();const input=document.getElementById("newTask"),text=input.value.trim();if(!text)return;tasks.push({text,done:false});input.value="";saveTasks()};
+document.getElementById("importLectures").onclick=()=>{
+  document.getElementById("accountMenu").hidden=true;document.getElementById("menuToggle").setAttribute("aria-expanded","false");
+  if(!activeUid||!cloudReady||!planReady){document.getElementById("importStatus").textContent="Sign in and wait for cloud sync before importing.";return}
+  document.getElementById("timetableFile").click();
+};
+document.getElementById("timetableFile").onchange=async event=>{
+  const file=event.target.files&&event.target.files[0];if(!file)return;
+  const result=document.getElementById("importStatus");result.textContent="Reading timetable…";
+  try{
+    const source=await file.text(),parsed=ICAL.parse(source);
+    function findCalendar(value){
+      if(Array.isArray(value)&&String(value[0]).toLowerCase()==="vcalendar")return value;
+      if(Array.isArray(value)){for(const child of value){const found=findCalendar(child);if(found)return found}}
+      return null;
+    }
+    const calendarData=findCalendar(parsed);if(!calendarData)throw new Error("This file does not contain a calendar.");
+    const calendar=new ICAL.Component(calendarData),events=calendar.getAllSubcomponents("vevent");
+    const now=new Date(),limit=new Date(now.getTime()+90*24*60*60*1000),oldImports=new Map();
+    tasks.forEach(task=>{if(task.source==="tudelft-ical"&&task.calendarEventId)oldImports.set(task.calendarEventId,task)});
+    const groups={};let found=0,added=0;
+    for(const component of events){
+      const eventStatus=component.getFirstPropertyValue("status");
+      if(String(eventStatus||"").toUpperCase()==="CANCELLED")continue;
+      const summary=String(component.getFirstPropertyValue("summary")||"Lecture").replace(/\\n/g," ").trim();
+      const uid=String(component.getFirstPropertyValue("uid")||summary),startProperty=component.getFirstPropertyValue("dtstart");
+      if(!startProperty)continue;
+      const expansion=new ICAL.RecurExpansion({component,dtstart:startProperty});
+      let occurrence,guard=0;
+      while((occurrence=expansion.next())&&guard++<2000){
+        const start=occurrence.toJSDate();if(start>limit)break;if(start<now)continue;
+        const startKey=occurrence.toString(),calendarEventId=uid+"|"+startKey;
+        const dayDate=new Date(start.getFullYear(),start.getMonth(),start.getDate());
+        const weekday=dayDate.getDay()||7,weekMonday=new Date(dayDate);weekMonday.setDate(weekMonday.getDate()-weekday+1);
+        const planWeekKey=localDateKey(weekMonday),dayIndex=Math.round((dayDate-weekMonday)/86400000);
+        const when=start.toLocaleString(undefined,{weekday:"short",month:"short",day:"numeric",hour:"2-digit",minute:"2-digit"});
+        if(!groups[planWeekKey])groups[planWeekKey]=Array.from({length:7},()=>[]);
+        groups[planWeekKey][dayIndex].push({topic:summary+" · "+when,done:!!(oldImports.get(calendarEventId)||{}).done,priority:true,source:"tudelft-ical",calendarEventId});
+        found++;
+      }
+    }
+    if(!found){result.textContent="No upcoming timetable events found for the next 90 days.";return}
+    const weekKeys=Object.keys(groups).sort();
+    for(const key of weekKeys){
+      let plan;
+      if(key===weekKey)plan=revisionPlan.map(day=>Array.isArray(day)?day.slice():[]);
+      else{try{plan=JSON.parse(localStorage.getItem("eink-revision-plan-"+key)||"[]");if(!Array.isArray(plan))plan=[]}catch(e){plan=[]}}
+      if(activeUid&&cloudReady){
+        const snapshot=await getDoc(planRef(activeUid,key));
+        if(activeUid&&snapshot.exists())plan=localPlanFromCloud(snapshot.data().days);
+      }
+      while(plan.length<7)plan.push([]);
+      const known=new Set(plan.flat().map(item=>item&&item.calendarEventId).filter(Boolean));
+      for(let day=0;day<7;day++){
+        for(const lecture of groups[key][day]){
+          if(known.has(lecture.calendarEventId))continue;
+          plan[day].push(lecture);known.add(lecture.calendarEventId);added++;
+        }
+      }
+      try{localStorage.setItem("eink-revision-plan-"+key,JSON.stringify(plan))}catch(e){}
+      if(key===weekKey){revisionPlan=plan;renderRevisionPlan()}
+      if(activeUid&&cloudReady){
+        await setDoc(planRef(activeUid,key),{days:cloudPlanDays(plan),updatedAt:serverTimestamp()});
+        if(key===weekKey)planReady=true;
+      }
+    }
+    const oldCount=tasks.filter(task=>task.source==="tudelft-ical").length;
+    if(oldCount){tasks=tasks.filter(task=>task.source!=="tudelft-ical");editingTask=-1;saveTasks()}
+    result.textContent=added?added+" upcoming timetable events added to their revision-plan dates as high priority.":"No new timetable events; duplicates were skipped.";
+  }catch(error){
+    console.error("Timetable import failed:",error);
+    result.textContent=error.message||"Could not read this timetable file.";
+  }finally{event.target.value=""}
+};
+function renderRevisionPlan(){
+  const root=document.getElementById("revisionDays");root.innerHTML="";let total=0,done=0;
+  weekDates.forEach((date,day)=>{
+    const items=revisionPlan[day]||[];total+=items.length;done+=items.filter(x=>x.done).length;
+    const section=document.createElement("section");section.className="revision-day";
+    const head=document.createElement("div");head.className="revision-day-head";
+    const name=document.createElement("span");name.textContent=date.toLocaleDateString(undefined,{weekday:"long"});
+    const meta=document.createElement("span");meta.className="revision-day-meta";meta.textContent=date.toLocaleDateString(undefined,{month:"short",day:"numeric"})+" · "+items.filter(x=>x.done).length+"/"+items.length;
+    head.append(name,meta);section.appendChild(head);
+    if(!items.length){const empty=document.createElement("div");empty.className="revision-empty";empty.textContent="No revision planned";section.appendChild(empty)}
+    else{
+      const list=document.createElement("div");list.className="revision-items";
+      items.forEach((item,index)=>{
+        const row=document.createElement("div");row.className="revision-item"+(item.done?" done":"")+(item.priority?" priority":"")+(item.source==="tudelft-ical"?" ical-event":"");
+        const check=document.createElement("input");check.type="checkbox";check.className="revision-check";check.checked=!!item.done;check.setAttribute("aria-label","Mark "+item.topic+" revised");check.onchange=()=>{revisionPlan[day][index].done=check.checked;saveRevisionPlan()};
+        if(editingRevision&&editingRevision.day===day&&editingRevision.index===index){
+          const form=document.createElement("form");form.className="revision-edit-form";
+          const input=document.createElement("input");input.value=item.topic;input.maxLength=90;input.required=true;input.setAttribute("aria-label","Edit revision topic");
+          const actions=document.createElement("div");actions.className="edit-actions";
+          const cancel=document.createElement("button");cancel.type="button";cancel.className="cancel";cancel.textContent="Cancel";cancel.onclick=()=>{editingRevision=null;renderRevisionPlan()};
+          const save=document.createElement("button");save.type="submit";save.textContent="Save";save.className="primary-button";
+          actions.append(cancel,save);form.append(input,actions);form.onsubmit=e=>{e.preventDefault();const value=input.value.trim();if(!value)return;revisionPlan[day][index].topic=value;editingRevision=null;saveRevisionPlan()};
+          row.append(check,form);
+        }else{
+          const topic=document.createElement("span");topic.className="revision-topic";topic.textContent=item.topic;
+          const controls=document.createElement("div");controls.className="revision-controls";
+          const priority=document.createElement("button");priority.type="button";priority.textContent=item.priority?"★":"☆";priority.setAttribute("aria-pressed",!!item.priority);priority.setAttribute("aria-label",item.priority?"Remove high priority":"Mark high priority");priority.onclick=()=>{revisionPlan[day][index].priority=!revisionPlan[day][index].priority;saveRevisionPlan()};
+          const up=document.createElement("button");up.type="button";up.textContent="↑";up.disabled=index===0;up.setAttribute("aria-label","Move up");up.onclick=()=>{const arr=revisionPlan[day];[arr[index-1],arr[index]]=[arr[index],arr[index-1]];saveRevisionPlan()};
+          const down=document.createElement("button");down.type="button";down.textContent="↓";down.disabled=index===items.length-1;down.setAttribute("aria-label","Move down");down.onclick=()=>{const arr=revisionPlan[day];[arr[index+1],arr[index]]=[arr[index],arr[index+1]];saveRevisionPlan()};
+          const edit=document.createElement("button");edit.type="button";edit.textContent="✎";edit.setAttribute("aria-label","Edit "+item.topic);edit.onclick=()=>{editingRevision={day,index};renderRevisionPlan();const input=root.querySelector(".revision-edit-form input");if(input){input.focus();input.select()}};
+          const remove=document.createElement("button");remove.type="button";remove.textContent="×";remove.setAttribute("aria-label","Remove "+item.topic);remove.onclick=()=>{revisionPlan[day].splice(index,1);editingRevision=null;saveRevisionPlan()};
+          controls.append(priority,up,down,edit,remove);row.append(check,topic,controls);
+        }
+        list.appendChild(row);
+      });
+      section.appendChild(list);
+    }
+    root.appendChild(section);
+  });
+  document.getElementById("revisionProgress").textContent=done+" / "+total+" sessions revised";
+}
+function saveRevisionPlan(){
+  saveLocalPlan();renderRevisionPlan();
+  if(!cloudReady||!activeUid)return;
+  const detail={weekKey,items:revisionPlan};
+  if(!planReady){pendingRevision=detail;return}
+  setDoc(planRef(activeUid,weekKey),{days:cloudPlanDays(revisionPlan),updatedAt:serverTimestamp()}).catch(error=>{setStatus("Plan sync issue — saved on this device");console.error(error)});
+}
+document.getElementById("revisionForm").onsubmit=e=>{e.preventDefault();const input=document.getElementById("revisionTopic"),topic=input.value.trim(),day=Number(document.getElementById("revisionDay").value);if(!topic||day<0||day>6)return;if(!revisionPlan[day])revisionPlan[day]=[];revisionPlan[day].push({topic,done:false,priority:false});input.value="";saveRevisionPlan()};
+document.getElementById("previousWeek").onclick=()=>switchWeek(weekOffset-1);
+document.getElementById("nextWeek").onclick=()=>switchWeek(weekOffset+1);
+document.getElementById("thisWeek").onclick=()=>switchWeek(0);
+function switchWeek(offset){updateWeek(offset);if(activeUid&&cloudReady)loadPlanWeek(activeUid,weekKey,revisionPlan).catch(showPlanError)}
+updateWeek(0);
+function savePlanLocal(){saveLocalPlan()}
+function showPlanError(error){const code=error&&error.code?error.code:"unknown";setStatus("Plan sync issue ("+code+") — saved on this device")}
+
+async function loadPlanWeek(uid,key,localItems){
+  planReady=false;if(planWatch){planWatch();planWatch=null}
+  const ref=planRef(uid,key),snapshot=await getDoc(ref);
+  if(activeUid!==uid||weekKey!==key)return;
+  if(snapshot.exists())applyPlan(snapshot.data().days);
+  else await setDoc(ref,{days:cloudPlanDays(localItems),updatedAt:serverTimestamp()});
+  if(activeUid!==uid||weekKey!==key)return;
+  planReady=true;
+  planWatch=onSnapshot(ref,value=>{if(activeUid===uid&&weekKey===key&&value.exists())applyPlan(value.data().days)},showPlanError);
+  if(pendingRevision&&pendingRevision.weekKey===key){
+    const pending=pendingRevision;pendingRevision=null;
+    setDoc(ref,{days:cloudPlanDays(pending.items),updatedAt:serverTimestamp()}).catch(showPlanError);
+  }
+}
+function applyPlan(days){
+  revisionPlan=localPlanFromCloud(days);saveLocalPlan();editingRevision=null;renderRevisionPlan();
+}
 
 function importedCalendarTaskDate(task){
   const text=String(task.text||"");
@@ -225,7 +409,8 @@ async function moveImportedTasksToRevision(uid){
   }
   const remaining=tasks.filter(task=>!(task&&task.source==="tudelft-ical"&&movedIds.has(task.calendarEventId)));
   if(remaining.length!==tasks.length){
-    applyTasks(remaining);
+    tasks=remaining;try{localStorage.setItem("eink-study-tasks",JSON.stringify(tasks))}catch(e){}
+    editingTask=-1;renderTasks();
     if(activeUid===uid&&cloudReady)await setDoc(taskRef(uid),{items:remaining,updatedAt:serverTimestamp()});
   }
   return {moved,unreadable};
