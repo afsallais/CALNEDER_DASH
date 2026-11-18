@@ -122,6 +122,12 @@ html.color .focus-card.complete .focus-label,html.color .focus-card.complete .fo
 .task-remove:focus-visible{outline:2px solid var(--ink);outline-offset:1px}
 .task-empty{color:var(--mute);font-size:11px;text-align:center;padding:8px}
 .revision-panel{min-width:0}
+.revision-titlebar{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.revision-panel .revision-titlebar h2{flex:1;margin:0;padding-bottom:7px}
+.revision-week-nav{display:flex;gap:5px}
+.revision-week-nav button{min-width:36px;min-height:34px;border:1px solid var(--line);border-radius:8px;background:var(--card);color:var(--ink);font:inherit;font-size:18px;line-height:1;cursor:pointer}
+.revision-week-nav button#revisionThis{padding:0 8px;font-size:10px;font-weight:650}
+.revision-week-nav button[hidden]{display:none}
 .revision-panel h2{text-align:left;font-size:18px;letter-spacing:.04em;margin-bottom:6px;padding-bottom:7px}
 .revision-week{font-size:11px;color:var(--mute);text-align:center;margin-bottom:7px}
 .revision-progress{font-size:11px;color:var(--mute);text-align:right;margin-bottom:8px}
@@ -232,7 +238,14 @@ html.color .focus-card.complete .focus-label,html.color .focus-card.complete .fo
     </div>
   </section>
   <section class="card revision-panel" aria-labelledby="revisionTitle">
-    <h2 id="revisionTitle">7-Day Revision Plan</h2>
+    <div class="revision-titlebar">
+      <h2 id="revisionTitle">7-Day Revision Plan</h2>
+      <div class="revision-week-nav" aria-label="Revision plan weeks">
+        <button id="revisionPrev" type="button" aria-label="Previous week" title="Previous week">‹</button>
+        <button id="revisionThis" type="button" hidden>This week</button>
+        <button id="revisionNext" type="button" aria-label="Next week" title="Next week">›</button>
+      </div>
+    </div>
     <div class="revision-week" id="revisionWeek"></div>
     <div class="revision-progress" id="revisionProgress">0 / 0 sessions revised</div>
     <div class="cloud-sync" aria-label="Cloud sync status">
@@ -639,19 +652,28 @@ showFocusTime();renderStudyTasks();
 function localDateKey(date){
  return date.getFullYear()+"-"+String(date.getMonth()+1).padStart(2,"0")+"-"+String(date.getDate()).padStart(2,"0");
 }
-var weekStart=new Date(),weekDay=weekStart.getDay()||7;
-weekStart.setDate(weekStart.getDate()-weekDay+1);weekStart.setHours(0,0,0,0);
-var weekDates=Array.from({length:7},function(_,i){var d=new Date(weekStart);d.setDate(d.getDate()+i);return d});
-var revisionKey="eink-revision-plan-"+localDateKey(weekStart),REVISION_PLAN=[];
-try{REVISION_PLAN=JSON.parse(localStorage.getItem(revisionKey)||"[]")}catch(e){}
+var currentMonday=new Date(),mondayDay=currentMonday.getDay()||7;
+currentMonday.setDate(currentMonday.getDate()-mondayDay+1);currentMonday.setHours(0,0,0,0);
+var weekStart=new Date(currentMonday),weekDates=[],revisionKey="",REVISION_PLAN=[],weekOffset=0;
 var dayFormat={weekday:"long"},shortDateFormat={day:"numeric",month:"short"};
-$("revisionWeek").textContent=weekDates[0].toLocaleDateString("en",shortDateFormat)+" – "+weekDates[6].toLocaleDateString("en",{day:"numeric",month:"short",year:"numeric"});
-weekDates.forEach(function(date,index){
- var option=document.createElement("option");
- option.value=String(index);
- option.textContent=date.toLocaleDateString("en",{weekday:"short",day:"numeric",month:"short"});
- $("revisionDay").appendChild(option);
-});
+function selectRevisionWeek(offset,notifyCloud){
+ weekOffset=offset;weekStart=new Date(currentMonday);weekStart.setDate(weekStart.getDate()+offset*7);
+ weekDates=Array.from({length:7},function(_,i){var d=new Date(weekStart);d.setDate(d.getDate()+i);return d});
+ revisionKey="eink-revision-plan-"+localDateKey(weekStart);REVISION_PLAN=[];
+ try{REVISION_PLAN=JSON.parse(localStorage.getItem(revisionKey)||"[]")}catch(e){}
+ $("revisionWeek").textContent=weekDates[0].toLocaleDateString("en",shortDateFormat)+" – "+weekDates[6].toLocaleDateString("en",{day:"numeric",month:"short",year:"numeric"});
+ var picker=$("revisionDay");picker.innerHTML="";
+ weekDates.forEach(function(date,index){
+  var option=document.createElement("option");option.value=String(index);
+  option.textContent=date.toLocaleDateString("en",{weekday:"short",day:"numeric",month:"short"});picker.appendChild(option);
+ });
+ $("revisionThis").hidden=weekOffset===0;
+ renderRevisionPlan();
+ if(notifyCloud)window.dispatchEvent(new CustomEvent("dashboard-plan-week-change",{detail:{weekKey:localDateKey(weekStart),items:REVISION_PLAN}}));
+}
+$("revisionPrev").onclick=function(){selectRevisionWeek(weekOffset-1,true)};
+$("revisionNext").onclick=function(){selectRevisionWeek(weekOffset+1,true)};
+$("revisionThis").onclick=function(){selectRevisionWeek(0,true)};
 function renderRevisionPlan(){
  var days=$("revisionDays");days.innerHTML="";
  var total=0,done=0;
@@ -707,7 +729,7 @@ $("revisionForm").onsubmit=function(e){
  REVISION_PLAN[day].push({topic:topic,done:false});
  $("revisionTopic").value="";saveRevisionPlan();
 };
-renderRevisionPlan();
+selectRevisionWeek(0,false);
 
 
 
@@ -744,6 +766,8 @@ const copyButton = document.getElementById("cloudCopyUid");
 const statusEl = document.getElementById("cloudSyncStatus");
 let activeUid = null;
 let cloudReady = false;
+let planReady = false;
+let pendingPlanChange = null;
 let stopTaskWatch = null;
 let stopPlanWatch = null;
 let currentWeekKey = window.revisionKey.replace("eink-revision-plan-", "");
@@ -771,6 +795,27 @@ function applyPlan(days){
 }
 function taskRef(uid){ return doc(db, "users", uid, "dashboard", "studyTasks"); }
 function planRef(uid, weekKey){ return doc(db, "users", uid, "revisionPlans", weekKey); }
+async function loadPlanWeek(uid, weekKey, localItems){
+  planReady = false;
+  if(stopPlanWatch){ stopPlanWatch(); stopPlanWatch = null; }
+  const ref = planRef(uid, weekKey);
+  const snapshot = await getDoc(ref);
+  if(activeUid !== uid || currentWeekKey !== weekKey) return;
+  if(snapshot.exists()) applyPlan(snapshot.data().days);
+  else await setDoc(ref, {days:cloudPlanDays(localItems), updatedAt:serverTimestamp()});
+  if(activeUid !== uid || currentWeekKey !== weekKey) return;
+  planReady = true;
+  stopPlanWatch = onSnapshot(ref, value => {
+    if(activeUid === uid && currentWeekKey === weekKey && value.exists()) applyPlan(value.data().days);
+  }, error => setStatus("Plan sync issue — changes remain saved on this device"));
+  if(pendingPlanChange && pendingPlanChange.weekKey === weekKey){
+    const pending = pendingPlanChange; pendingPlanChange = null;
+    setDoc(ref, {days:cloudPlanDays(pending.items), updatedAt:serverTimestamp()}).catch(error => {
+      setStatus("Plan sync issue — changes remain saved on this device");
+      console.error("Firestore plan save failed:", error);
+    });
+  }
+}
 
 async function connectUser(user){
   activeUid = user.uid;
@@ -782,20 +827,16 @@ async function connectUser(user){
   setStatus("Connecting your study data…");
   try{
     const tasksDoc = await getDoc(taskRef(user.uid));
-    const planDoc = await getDoc(planRef(user.uid, currentWeekKey));
     if(activeUid !== user.uid) return;
     if(tasksDoc.exists()) applyTasks(tasksDoc.data().items);
     else await setDoc(taskRef(user.uid), {items:localTasks(), updatedAt:serverTimestamp()});
-    if(planDoc.exists()) applyPlan(planDoc.data().days);
-    else await setDoc(planRef(user.uid, currentWeekKey), {days:cloudPlanDays(localPlan()), updatedAt:serverTimestamp()});
     if(activeUid !== user.uid) return;
     cloudReady = true;
+    await loadPlanWeek(user.uid, currentWeekKey, localPlan());
+    if(activeUid !== user.uid) return;
     setStatus("Cloud sync is on");
     stopTaskWatch = onSnapshot(taskRef(user.uid), snapshot => {
       if(activeUid === user.uid && snapshot.exists()) applyTasks(snapshot.data().items);
-    }, error => setStatus("Sync issue — changes remain saved on this device"));
-    stopPlanWatch = onSnapshot(planRef(user.uid, currentWeekKey), snapshot => {
-      if(activeUid === user.uid && snapshot.exists()) applyPlan(snapshot.data().days);
     }, error => setStatus("Sync issue — changes remain saved on this device"));
   }catch(error){
     cloudReady = false;
@@ -847,6 +888,7 @@ onAuthStateChanged(auth, user => {
     if(stopTaskWatch) stopTaskWatch();
     if(stopPlanWatch) stopPlanWatch();
     stopTaskWatch = stopPlanWatch = null;
+    planReady = false;pendingPlanChange = null;
     authButton.textContent = "Sign in to sync";
     copyButton.hidden = true;
     setStatus("Saved on this device");
@@ -854,9 +896,28 @@ onAuthStateChanged(auth, user => {
     connectUser(user);
   }
 });
+window.addEventListener("dashboard-plan-week-change", event => {
+  const detail = event.detail || {};
+  if(!detail.weekKey) return;
+  currentWeekKey = detail.weekKey;
+  planReady = false;
+  pendingPlanChange = null;
+  if(!activeUid || !cloudReady) return;
+  const uid = activeUid, key = currentWeekKey;
+  loadPlanWeek(uid, key, Array.isArray(detail.items) ? detail.items : []).catch(error => {
+    if(activeUid === uid && currentWeekKey === key){
+      const code = error && error.code ? error.code : "unknown";
+      setStatus("Plan sync issue (" + code + ") — changes remain saved on this device");
+    }
+  });
+});
 window.addEventListener("dashboard-local-save", event => {
   if(!cloudReady || !activeUid) return;
   const detail = event.detail || {};
+  if(detail.kind === "revisionPlan" && !planReady){
+    pendingPlanChange = {weekKey:detail.weekKey, items:Array.isArray(detail.items)?detail.items:[]};
+    return;
+  }
   const ref = detail.kind === "studyTasks"
     ? taskRef(activeUid)
     : detail.kind === "revisionPlan" && detail.weekKey === currentWeekKey
