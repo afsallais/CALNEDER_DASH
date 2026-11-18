@@ -68,6 +68,9 @@ dialog{border:1.5px solid var(--line);border-radius:14px;background:var(--paper)
 dialog label{display:block;font-size:13px;color:var(--mute);margin-top:10px}
 dialog input,dialog select{width:100%;padding:8px;border:1.5px solid var(--line);border-radius:8px;background:var(--card);color:var(--ink);font:inherit}
 dialog button{margin-top:16px;padding:8px 16px;border:1.5px solid var(--ink);border-radius:8px;background:var(--ink);color:var(--paper);font:inherit;cursor:pointer}
+.cloud-sync{display:flex;align-items:center;gap:8px;margin:0 0 10px;flex-wrap:wrap}
+.cloud-sync button{border:1px solid var(--line);border-radius:7px;background:var(--card);color:var(--ink);padding:6px 9px;font:inherit;font-size:11px;font-weight:600;cursor:pointer}
+.cloud-sync-status{flex:1;min-width:160px;color:var(--mute);font-size:10px}
 /* ---- inverted (dark) mode ---- */
 html.inv{--paper:#050505;--card:#0b0b0b;--ink:#e8e8e4;--mute:#9a9a95;--line:#4a4a47;--bezel:#000}
 html.color{--paper:#f6f3e8;--card:#fffdf7;--ink:#29353b;--mute:#657278;--line:#bec8c3;--bezel:#e6ece8;--sunrise:#b8741d;--sunset:#a85150;--accent-left:#e4f1f6;--accent-calendar:#e5f2dc;--accent-plan:#fff0bf}
@@ -225,6 +228,11 @@ html.color .focus-card.complete .focus-label,html.color .focus-card.complete .fo
     <h2 id="revisionTitle">7-Day Revision Plan</h2>
     <div class="revision-week" id="revisionWeek"></div>
     <div class="revision-progress" id="revisionProgress">0 / 0 sessions revised</div>
+    <div class="cloud-sync" aria-label="Cloud sync">
+      <button type="button" id="cloudAuthButton">Sign in to sync</button>
+      <button type="button" id="cloudCopyUid" hidden>Copy UID</button>
+      <span class="cloud-sync-status" id="cloudSyncStatus" role="status" aria-live="polite">Saved on this device</span>
+    </div>
     <form class="revision-form" id="revisionForm">
       <select id="revisionDay" aria-label="Plan day"></select>
       <input id="revisionTopic" maxlength="90" placeholder="Topic to revise" aria-label="Topic to revise">
@@ -613,6 +621,7 @@ function renderStudyTasks(){
 function saveStudyTasks(){
  try{localStorage.setItem("eink-study-tasks",JSON.stringify(STUDY_TASKS))}catch(e){}
  renderStudyTasks();
+ window.dispatchEvent(new CustomEvent("dashboard-local-save",{detail:{kind:"studyTasks",items:STUDY_TASKS}}));
 }
 $("taskForm").onsubmit=function(e){
  e.preventDefault();var input=$("taskInput"),value=input.value.trim();if(!value)return;
@@ -683,6 +692,7 @@ function renderRevisionPlan(){
 function saveRevisionPlan(){
  try{localStorage.setItem(revisionKey,JSON.stringify(REVISION_PLAN))}catch(e){}
  renderRevisionPlan();
+ window.dispatchEvent(new CustomEvent("dashboard-local-save",{detail:{kind:"revisionPlan",weekKey:localDateKey(weekStart),items:REVISION_PLAN}}));
 }
 $("revisionForm").onsubmit=function(e){
  e.preventDefault();
@@ -707,5 +717,136 @@ $("save").onclick=function(){
  $("dlg").close();fullRefresh(function(){renderWx(true)});
 };
 </script>
+
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/13.3.0/firebase-app.js";
+import { getAuth, GoogleAuthProvider, onAuthStateChanged, signInWithPopup, signOut } from "https://www.gstatic.com/firebasejs/13.3.0/firebase-auth.js";
+import { getFirestore, doc, getDoc, setDoc, onSnapshot, serverTimestamp } from "https://www.gstatic.com/firebasejs/13.3.0/firebase-firestore.js";
+
+const firebaseConfig = {
+  apiKey: "AIzaSyC_NUvfTkLrVqcZRz-lgyeL0y4UpBqiSPc",
+  authDomain: "calenderdash-9ed0b.firebaseapp.com",
+  projectId: "calenderdash-9ed0b",
+  storageBucket: "calenderdash-9ed0b.firebasestorage.app",
+  messagingSenderId: "39149780870",
+  appId: "1:39149780870:web:fa92080191eb6b40787607"
+};
+const firebaseApp = initializeApp(firebaseConfig);
+const auth = getAuth(firebaseApp);
+const db = getFirestore(firebaseApp);
+const authButton = document.getElementById("cloudAuthButton");
+const copyButton = document.getElementById("cloudCopyUid");
+const statusEl = document.getElementById("cloudSyncStatus");
+let activeUid = null;
+let cloudReady = false;
+let stopTaskWatch = null;
+let stopPlanWatch = null;
+let currentWeekKey = window.revisionKey.replace("eink-revision-plan-", "");
+
+function setStatus(message){ statusEl.textContent = message; }
+function localTasks(){ return Array.isArray(window.STUDY_TASKS) ? window.STUDY_TASKS : []; }
+function localPlan(){ return Array.isArray(window.REVISION_PLAN) ? window.REVISION_PLAN : []; }
+function applyTasks(items){
+  window.STUDY_TASKS = Array.isArray(items) ? items : [];
+  try{ localStorage.setItem("eink-study-tasks", JSON.stringify(window.STUDY_TASKS)); }catch(e){}
+  window.renderStudyTasks();
+}
+function applyPlan(items){
+  window.REVISION_PLAN = Array.isArray(items) ? items : [];
+  try{ localStorage.setItem(window.revisionKey, JSON.stringify(window.REVISION_PLAN)); }catch(e){}
+  window.renderRevisionPlan();
+}
+function taskRef(uid){ return doc(db, "users", uid, "dashboard", "studyTasks"); }
+function planRef(uid, weekKey){ return doc(db, "users", uid, "revisionPlans", weekKey); }
+
+async function connectUser(user){
+  activeUid = user.uid;
+  cloudReady = false;
+  if(stopTaskWatch) stopTaskWatch();
+  if(stopPlanWatch) stopPlanWatch();
+  authButton.textContent = "Sign out";
+  copyButton.hidden = false;
+  setStatus("Connecting your study data…");
+  try{
+    const tasksDoc = await getDoc(taskRef(user.uid));
+    const planDoc = await getDoc(planRef(user.uid, currentWeekKey));
+    if(activeUid !== user.uid) return;
+    if(tasksDoc.exists()) applyTasks(tasksDoc.data().items);
+    else await setDoc(taskRef(user.uid), {items:localTasks(), updatedAt:serverTimestamp()});
+    if(planDoc.exists()) applyPlan(planDoc.data().items);
+    else await setDoc(planRef(user.uid, currentWeekKey), {items:localPlan(), updatedAt:serverTimestamp()});
+    if(activeUid !== user.uid) return;
+    cloudReady = true;
+    setStatus("Cloud sync is on");
+    stopTaskWatch = onSnapshot(taskRef(user.uid), snapshot => {
+      if(activeUid === user.uid && snapshot.exists()) applyTasks(snapshot.data().items);
+    }, error => setStatus("Sync issue — changes remain saved on this device"));
+    stopPlanWatch = onSnapshot(planRef(user.uid, currentWeekKey), snapshot => {
+      if(activeUid === user.uid && snapshot.exists()) applyPlan(snapshot.data().items);
+    }, error => setStatus("Sync issue — changes remain saved on this device"));
+  }catch(error){
+    cloudReady = false;
+    setStatus(error.code === "permission-denied"
+      ? "Firestore rules blocked access — publish the signed-in user rules"
+      : "Could not connect — check Firestore setup and authorized domain");
+    console.error("Firestore connection failed:", error);
+  }
+}
+
+authButton.addEventListener("click", async () => {
+  if(auth.currentUser){
+    try{ await signOut(auth); }catch(error){ setStatus("Could not sign out"); }
+    return;
+  }
+  try{
+    await signInWithPopup(auth, new GoogleAuthProvider());
+  }catch(error){
+    const messages = {
+      "auth/unauthorized-domain":"Add afsallais.github.io to Firebase Authorized domains",
+      "auth/popup-blocked":"Allow popups for this page, then try again",
+      "auth/operation-not-allowed":"Enable Google sign-in in Firebase Authentication"
+    };
+    setStatus(messages[error.code] || "Sign-in failed — check Firebase Authentication setup");
+  }
+});
+copyButton.addEventListener("click", async () => {
+  if(!auth.currentUser) return;
+  try{
+    await navigator.clipboard.writeText(auth.currentUser.uid);
+    setStatus("Firebase UID copied");
+  }catch(error){
+    setStatus("UID: " + auth.currentUser.uid);
+  }
+});
+onAuthStateChanged(auth, user => {
+  if(!user){
+    activeUid = null;
+    cloudReady = false;
+    if(stopTaskWatch) stopTaskWatch();
+    if(stopPlanWatch) stopPlanWatch();
+    stopTaskWatch = stopPlanWatch = null;
+    authButton.textContent = "Sign in to sync";
+    copyButton.hidden = true;
+    setStatus("Saved on this device");
+  }else{
+    connectUser(user);
+  }
+});
+window.addEventListener("dashboard-local-save", event => {
+  if(!cloudReady || !activeUid) return;
+  const detail = event.detail || {};
+  const ref = detail.kind === "studyTasks"
+    ? taskRef(activeUid)
+    : detail.kind === "revisionPlan" && detail.weekKey === currentWeekKey
+      ? planRef(activeUid, currentWeekKey) : null;
+  if(!ref) return;
+  const items = Array.isArray(detail.items) ? detail.items : [];
+  setDoc(ref, {items, updatedAt:serverTimestamp()}).catch(error => {
+    setStatus("Sync issue — changes remain saved on this device");
+    console.error("Firestore save failed:", error);
+  });
+});
+</script>
+
 </body>
 </html>
