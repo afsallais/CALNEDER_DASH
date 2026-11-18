@@ -419,7 +419,7 @@ function drawClock(g){
  var n=new Date(),h=n.getHours(),m=n.getMinutes(),sec=n.getSeconds();
  setG($("time"),String(h%12||12).padStart(2,"0")+":"+String(m).padStart(2,"0")+" "+(h<12?"AM":"PM"),false,!g);
  var ha=((h%12)+m/60)*30,ma=m*6;
- if(g&&pma!==null){ghostHand("gh1",pha);ghostHand("gm1",pma)}
+ // Keep clock hands in a single position; trails can look like a second minute hand.
  $("ah").setAttribute("transform","rotate("+ha+" 100 100)");
  $("am").setAttribute("transform","rotate("+ma+" 100 100)");
  $("as").setAttribute("transform","rotate("+(sec*6)+" 100 100)");
