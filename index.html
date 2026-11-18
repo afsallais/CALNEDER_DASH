@@ -786,9 +786,15 @@ async function connectUser(user){
     }, error => setStatus("Sync issue — changes remain saved on this device"));
   }catch(error){
     cloudReady = false;
-    setStatus(error.code === "permission-denied"
-      ? "Firestore rules blocked access — publish the signed-in user rules"
-      : "Could not connect — check Firestore setup and authorized domain");
+    const code = error && error.code ? error.code : "unknown";
+    const messages = {
+      "permission-denied":"Firestore denied access — publish the user-scoped rules",
+      "failed-precondition":"Firestore is not ready — create the Cloud Firestore database",
+      "not-found":"Cloud Firestore database not found — create it in this Firebase project",
+      "unavailable":"Firestore is temporarily unavailable — check your connection and try again",
+      "unauthenticated":"Sign-in expired — sign in again to sync"
+    };
+    setStatus((messages[code] || "Firestore connection failed") + " (" + code + ")");
     console.error("Firestore connection failed:", error);
   }
 }
