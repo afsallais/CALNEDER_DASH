@@ -18,6 +18,7 @@ header{display:flex;align-items:center;justify-content:space-between;gap:12px;ma
 .more-menu[hidden],.more-menu button[hidden]{display:none}
 .more-menu button{width:100%;min-height:44px;border:0;border-radius:8px;padding:9px 11px;background:transparent;color:var(--ink);text-align:left;font-weight:650;cursor:pointer}
 .more-menu button:hover,.more-menu button:focus-visible{background:var(--blue)}
+.menu-separator{height:1px;background:var(--line);margin:5px 4px}
 .panel{border:1px solid var(--line);border-radius:20px;padding:16px;background:var(--blue);box-shadow:0 6px 20px #30434a12}
 .panel+.panel{margin-top:12px}
 h1{font-size:clamp(23px,7vw,32px);line-height:1.15;margin:0 0 4px}
@@ -34,9 +35,7 @@ button,input,select{font:inherit}
 ul{list-style:none;margin:0;padding:0;display:grid;gap:7px}
 .task-row{display:flex;align-items:center;gap:9px;min-width:0;padding:8px;border:1px solid var(--line);border-radius:13px;background:var(--card)}
 .task-check,.revision-check{width:22px;height:22px;flex:0 0 auto;accent-color:#426b4c}
-.import-row{display:flex;align-items:center;gap:8px;margin:0 0 12px;flex-wrap:wrap}
-.import-button{min-height:40px;border:1px solid #83adbf;border-radius:10px;padding:7px 10px;background:#eaf4f8;color:#24536a;font-size:12px;font-weight:700;cursor:pointer}
-.import-status{flex:1;min-width:150px;color:var(--muted);font-size:11px}
+.import-status{color:#71603f;font-size:11px;margin:0 0 8px;line-height:1.4}
 .task-text,.revision-topic{min-width:0;flex:1;overflow-wrap:anywhere;font-size:14px;line-height:1.35}
 .task-row.done .task-text,.revision-item.done .revision-topic{text-decoration:line-through;color:var(--muted)}
 .task-actions{display:flex;align-items:center;gap:2px;flex:0 0 auto}
@@ -93,6 +92,8 @@ ul{list-style:none;margin:0;padding:0;display:grid;gap:7px}
       <div id="accountMenu" class="more-menu" hidden>
         <button id="authButton" type="button">Sign in to sync</button>
         <button id="copyUid" type="button" hidden>Copy UID</button>
+        <div class="menu-separator" aria-hidden="true"></div>
+        <button id="importLectures" type="button">Import TU Delft timetable (.ics)</button>
       </div>
     </div>
   </header>
@@ -106,11 +107,7 @@ ul{list-style:none;margin:0;padding:0;display:grid;gap:7px}
       <input id="newTask" maxlength="80" placeholder="Add a study task" aria-label="New study task" required>
       <button class="primary-button" type="submit">Add</button>
     </form>
-    <div class="import-row">
-      <input id="timetableFile" type="file" accept=".ics,text/calendar" hidden>
-      <button id="importLectures" class="import-button" type="button">Import lectures (.ics)</button>
-      <span id="importStatus" class="import-status" role="status" aria-live="polite">Choose a downloaded TU Delft timetable file.</span>
-    </div>
+    <input id="timetableFile" type="file" accept=".ics,text/calendar" hidden>
     <ul id="taskList" aria-label="Study tasks"></ul>
   </section>
 
@@ -125,6 +122,7 @@ ul{list-style:none;margin:0;padding:0;display:grid;gap:7px}
     </div>
     <div id="weekLabel" class="week-label"></div>
     <div id="revisionProgress" class="revision-progress">0 / 0 revised</div>
+    <div id="importStatus" class="import-status" role="status" aria-live="polite">Import a timetable from the three-dot menu.</div>
     <form id="revisionForm" class="revision-form">
       <select id="revisionDay" aria-label="Plan day"></select>
       <input id="revisionTopic" maxlength="90" placeholder="Topic to revise" aria-label="Topic to revise" required>
@@ -196,7 +194,11 @@ function renderTasks(){
 function saveTasks(){try{localStorage.setItem("eink-study-tasks",JSON.stringify(tasks))}catch(e){}renderTasks();window.dispatchEvent(new CustomEvent("mobile-tasks-save",{detail:{items:tasks}}))}
 function applyTasks(items){tasks=Array.isArray(items)?items:[];try{localStorage.setItem("eink-study-tasks",JSON.stringify(tasks))}catch(e){}editingTask=-1;renderTasks()}
 document.getElementById("addForm").onsubmit=e=>{e.preventDefault();const input=document.getElementById("newTask"),text=input.value.trim();if(!text)return;tasks.push({text,done:false});input.value="";saveTasks()};
-document.getElementById("importLectures").onclick=()=>document.getElementById("timetableFile").click();
+document.getElementById("importLectures").onclick=()=>{
+  document.getElementById("accountMenu").hidden=true;document.getElementById("menuToggle").setAttribute("aria-expanded","false");
+  if(!activeUid||!cloudReady||!planReady){document.getElementById("importStatus").textContent="Sign in and wait for cloud sync before importing.";return}
+  document.getElementById("timetableFile").click();
+};
 document.getElementById("timetableFile").onchange=async event=>{
   const file=event.target.files&&event.target.files[0];if(!file)return;
   const result=document.getElementById("importStatus");result.textContent="Reading timetable…";
@@ -209,27 +211,57 @@ document.getElementById("timetableFile").onchange=async event=>{
     }
     const calendarData=findCalendar(parsed);if(!calendarData)throw new Error("This file does not contain a calendar.");
     const calendar=new ICAL.Component(calendarData),events=calendar.getAllSubcomponents("vevent");
-    const now=new Date(),limit=new Date(now.getTime()+90*24*60*60*1000);
-    const known=new Set(tasks.map(task=>task.calendarEventId).filter(Boolean));let added=0;
+    const now=new Date(),limit=new Date(now.getTime()+90*24*60*60*1000),oldImports=new Map();
+    tasks.forEach(task=>{if(task.source==="tudelft-ical"&&task.calendarEventId)oldImports.set(task.calendarEventId,task)});
+    const groups={};let found=0,added=0;
     for(const component of events){
       const eventStatus=component.getFirstPropertyValue("status");
       if(String(eventStatus||"").toUpperCase()==="CANCELLED")continue;
       const summary=String(component.getFirstPropertyValue("summary")||"Lecture").replace(/\\n/g," ").trim();
-      const uid=String(component.getFirstPropertyValue("uid")||summary);
-      const startProperty=component.getFirstPropertyValue("dtstart");if(!startProperty)continue;
+      const uid=String(component.getFirstPropertyValue("uid")||summary),startProperty=component.getFirstPropertyValue("dtstart");
+      if(!startProperty)continue;
       const expansion=new ICAL.RecurExpansion({component,dtstart:startProperty});
       let occurrence,guard=0;
       while((occurrence=expansion.next())&&guard++<2000){
         const start=occurrence.toJSDate();if(start>limit)break;if(start<now)continue;
         const startKey=occurrence.toString(),calendarEventId=uid+"|"+startKey;
-        if(known.has(calendarEventId))continue;
+        const dayDate=new Date(start.getFullYear(),start.getMonth(),start.getDate());
+        const weekday=dayDate.getDay()||7,weekMonday=new Date(dayDate);weekMonday.setDate(weekMonday.getDate()-weekday+1);
+        const planWeekKey=localDateKey(weekMonday),dayIndex=Math.round((dayDate-weekMonday)/86400000);
         const when=start.toLocaleString(undefined,{weekday:"short",month:"short",day:"numeric",hour:"2-digit",minute:"2-digit"});
-        tasks.push({text:summary+" · "+when,done:false,priority:true,source:"tudelft-ical",calendarEventId});
-        known.add(calendarEventId);added++;
+        if(!groups[planWeekKey])groups[planWeekKey]=Array.from({length:7},()=>[]);
+        groups[planWeekKey][dayIndex].push({topic:summary+" · "+when,done:!!(oldImports.get(calendarEventId)||{}).done,priority:true,source:"tudelft-ical",calendarEventId});
+        found++;
       }
     }
-    if(added)saveTasks();
-    result.textContent=added?added+" upcoming lecture/class tasks added as high priority.": "No new upcoming timetable events found.";
+    if(!found){result.textContent="No upcoming timetable events found for the next 90 days.";return}
+    const weekKeys=Object.keys(groups).sort();
+    for(const key of weekKeys){
+      let plan;
+      if(key===weekKey)plan=revisionPlan.map(day=>Array.isArray(day)?day.slice():[]);
+      else{try{plan=JSON.parse(localStorage.getItem("eink-revision-plan-"+key)||"[]");if(!Array.isArray(plan))plan=[]}catch(e){plan=[]}}
+      if(activeUid&&cloudReady){
+        const snapshot=await getDoc(planRef(activeUid,key));
+        if(activeUid&&snapshot.exists())plan=localPlanFromCloud(snapshot.data().days);
+      }
+      while(plan.length<7)plan.push([]);
+      const known=new Set(plan.flat().map(item=>item&&item.calendarEventId).filter(Boolean));
+      for(let day=0;day<7;day++){
+        for(const lecture of groups[key][day]){
+          if(known.has(lecture.calendarEventId))continue;
+          plan[day].push(lecture);known.add(lecture.calendarEventId);added++;
+        }
+      }
+      try{localStorage.setItem("eink-revision-plan-"+key,JSON.stringify(plan))}catch(e){}
+      if(key===weekKey){revisionPlan=plan;renderRevisionPlan()}
+      if(activeUid&&cloudReady){
+        await setDoc(planRef(activeUid,key),{days:cloudPlanDays(plan),updatedAt:serverTimestamp()});
+        if(key===weekKey)planReady=true;
+      }
+    }
+    const oldCount=tasks.filter(task=>task.source==="tudelft-ical").length;
+    if(oldCount){tasks=tasks.filter(task=>task.source!=="tudelft-ical");editingTask=-1;saveTasks()}
+    result.textContent=added?added+" upcoming timetable events added to their revision-plan dates as high priority.":"No new timetable events; duplicates were skipped.";
   }catch(error){
     console.error("Timetable import failed:",error);
     result.textContent=error.message||"Could not read this timetable file.";
