@@ -794,7 +794,8 @@ async function connectUser(user){
       "unavailable":"Firestore is temporarily unavailable — check your connection and try again",
       "unauthenticated":"Sign-in expired — sign in again to sync"
     };
-    setStatus((messages[code] || "Firestore connection failed") + " (" + code + ")");
+    const detail = error && error.message ? error.message : "";
+    setStatus((messages[code] || "Firestore connection failed") + " (" + code + ")" + (detail ? ": " + detail.slice(0, 150) : ""));
     console.error("Firestore connection failed:", error);
   }
 }
