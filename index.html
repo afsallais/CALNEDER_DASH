@@ -130,9 +130,14 @@ html.color .focus-card.complete .focus-label,html.color .focus-card.complete .fo
 .revision-items{display:grid;gap:4px;margin-top:5px}
 .revision-item{display:flex;align-items:center;gap:6px;font-size:11px;min-width:0}
 .revision-item input{accent-color:var(--ink);flex:0 0 auto}
-.revision-item span{overflow-wrap:anywhere}
+.revision-item span{overflow-wrap:anywhere;flex:1}
 .revision-item.done span{text-decoration:line-through;color:var(--mute)}
 .revision-item .task-remove{font-size:15px}
+.revision-priority{flex:0 0 auto;border:1px solid transparent;border-radius:6px;padding:3px 5px;background:transparent;color:#735c28;font:inherit;font-size:9px;font-weight:700;cursor:pointer}
+.revision-priority:hover,.revision-priority:focus-visible{border-color:#a89562;background:#fff7de}
+.revision-priority[aria-pressed="true"]{color:#852f26;background:#f6d4c2;border-color:#c77c66}
+.revision-item.priority{background:#f6e1d3;border-left:3px solid #b34e39;padding:4px 6px;border-radius:6px}
+.revision-item.priority .revision-priority[aria-pressed="true"]{background:#efc6b5;border-color:#b96550}
 .revision-empty{font-size:10px;color:var(--mute);padding:1px 0 0 21px}
 @media (max-width:1100px){.screen{max-width:960px;grid-template-columns:minmax(0,1fr) minmax(0,1fr)}.revision-panel{grid-column:1/-1}.revision-days{grid-template-columns:repeat(2,minmax(0,1fr));column-gap:18px}}
 @media (max-width:700px){.screen{grid-template-columns:1fr}.revision-panel{grid-column:auto}.revision-days{grid-template-columns:1fr}.clocks{grid-template-columns:1fr 1fr}.clockbox .analog{width:min(135px,90%)}}
@@ -649,13 +654,18 @@ function renderRevisionPlan(){
   else{
    var list=document.createElement("div");list.className="revision-items";
    items.forEach(function(item,itemIndex){
-    var row=document.createElement("div");row.className="revision-item"+(item.done?" done":"");
+    var row=document.createElement("div");row.className="revision-item"+(item.done?" done":"")+(item.priority?" priority":"");
     var check=document.createElement("input");check.type="checkbox";check.checked=!!item.done;check.setAttribute("aria-label","Mark "+item.topic+" revised");
     check.onchange=function(){REVISION_PLAN[dayIndex][itemIndex].done=check.checked;saveRevisionPlan()};
     var topic=document.createElement("span");topic.textContent=item.topic;
+    var priority=document.createElement("button");priority.type="button";priority.className="revision-priority";
+    priority.textContent=item.priority?"★ HIGH":"☆ Priority";
+    priority.setAttribute("aria-pressed",!!item.priority);
+    priority.setAttribute("aria-label",item.priority?"Remove high priority from "+item.topic:"Mark "+item.topic+" high priority");
+    priority.onclick=function(){REVISION_PLAN[dayIndex][itemIndex].priority=!REVISION_PLAN[dayIndex][itemIndex].priority;saveRevisionPlan()};
     var remove=document.createElement("button");remove.type="button";remove.className="task-remove";remove.textContent="×";remove.setAttribute("aria-label","Remove "+item.topic+" from plan");
     remove.onclick=function(){REVISION_PLAN[dayIndex].splice(itemIndex,1);saveRevisionPlan()};
-    row.appendChild(check);row.appendChild(topic);row.appendChild(remove);list.appendChild(row);
+    row.appendChild(check);row.appendChild(topic);row.appendChild(priority);row.appendChild(remove);list.appendChild(row);
    });
    section.appendChild(list);
   }
