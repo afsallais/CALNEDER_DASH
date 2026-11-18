@@ -85,6 +85,8 @@ html.color .focus-card.complete .focus-label,html.color .focus-card.complete .fo
 .display-dots{width:38px;height:34px;border:1.5px solid var(--line);border-radius:9px;background:var(--card);color:var(--ink);font:inherit;font-size:24px;line-height:1;cursor:pointer}
 .display-menu{position:absolute;top:40px;right:0;min-width:190px;padding:6px;background:var(--card);border:1.5px solid var(--line);border-radius:10px;box-shadow:0 5px 18px rgba(0,0,0,.22)}
 .display-menu[hidden]{display:none}
+.display-menu button[hidden]{display:none}
+.menu-separator{height:1px;background:var(--line);margin:5px 4px}
 .display-menu button{display:block;width:100%;text-align:left;padding:9px 10px;border:0;border-radius:7px;background:transparent;color:var(--ink);font:inherit;font-size:13px;cursor:pointer}
 .display-menu button:hover,.display-menu button:focus-visible,.display-menu button[aria-pressed="true"]{background:var(--bezel)}
 .analog .sunrise-mark{stroke:var(--sunrise)}
@@ -106,6 +108,8 @@ html.color .focus-card.complete .focus-label,html.color .focus-card.complete .fo
 .focus-card.running .focus-actions button:not(:first-child){color:#1d341e;background:#f3faf1;border-color:#638b61}
 .focus-status{font-size:10px;color:var(--mute);margin-top:6px;min-height:1.3em}
 .tasks-head{font-size:13px;margin:12px 0 6px}
+.task-open-link{color:var(--mute);font-size:10px;text-decoration:none;border:1px solid var(--line);border-radius:7px;padding:4px 7px;white-space:nowrap}
+.task-open-link:hover,.task-open-link:focus-visible{color:var(--ink);background:var(--bezel)}
 .tasks-count{color:var(--mute);font-size:11px}
 .task-form{display:flex;gap:6px}
 .task-form input{min-width:0;flex:1;padding:7px 8px;border:1px solid var(--line);border-radius:8px;background:var(--bezel);color:var(--ink);font:inherit;font-size:12px}
@@ -156,6 +160,9 @@ html.color .focus-card.complete .focus-label,html.color .focus-card.complete .fo
     <div class="display-menu" id="displayMenu" role="menu" hidden>
       <button id="colorToggle" type="button" role="menuitemcheckbox" aria-checked="false">Color version</button>
       <button id="inv" type="button" role="menuitemcheckbox" aria-checked="false" title="Invert display (I)">Invert display</button>
+      <div class="menu-separator" aria-hidden="true"></div>
+      <button id="cloudAuthButton" type="button" role="menuitem">Sign in to sync</button>
+      <button id="cloudCopyUid" type="button" role="menuitem" hidden>Copy UID</button>
     </div>
   </div>
   <section class="left">
@@ -219,7 +226,7 @@ html.color .focus-card.complete .focus-label,html.color .focus-card.complete .fo
         <div class="focus-actions"><button id="focusToggle">Start focus</button><button id="focusReset">Reset</button></div>
         <div class="focus-status" id="focusStatus">A quiet 25-minute study sprint.</div>
       </div>
-      <div class="tasks-head"><strong>Today's priorities</strong><span class="tasks-count" id="taskCount">0 done</span></div>
+      <div class="tasks-head"><strong>Today's priorities</strong><a class="task-open-link" href="./tasks.html">Manage tasks</a><span class="tasks-count" id="taskCount">0 done</span></div>
       <form class="task-form" id="taskForm"><input id="taskInput" maxlength="80" placeholder="Add a study task" aria-label="Add a study task"><button type="submit">Add</button></form>
       <ul class="task-list" id="taskList"></ul>
     </div>
@@ -228,9 +235,7 @@ html.color .focus-card.complete .focus-label,html.color .focus-card.complete .fo
     <h2 id="revisionTitle">7-Day Revision Plan</h2>
     <div class="revision-week" id="revisionWeek"></div>
     <div class="revision-progress" id="revisionProgress">0 / 0 sessions revised</div>
-    <div class="cloud-sync" aria-label="Cloud sync">
-      <button type="button" id="cloudAuthButton">Sign in to sync</button>
-      <button type="button" id="cloudCopyUid" hidden>Copy UID</button>
+    <div class="cloud-sync" aria-label="Cloud sync status">
       <span class="cloud-sync-status" id="cloudSyncStatus" role="status" aria-live="polite">Saved on this device</span>
     </div>
     <form class="revision-form" id="revisionForm">
@@ -781,7 +786,7 @@ async function connectUser(user){
     if(activeUid !== user.uid) return;
     if(tasksDoc.exists()) applyTasks(tasksDoc.data().items);
     else await setDoc(taskRef(user.uid), {items:localTasks(), updatedAt:serverTimestamp()});
-    if(planDoc.exists()) applyPlan(planDoc.data().items);
+    if(planDoc.exists()) applyPlan(planDoc.data().days);
     else await setDoc(planRef(user.uid, currentWeekKey), {days:cloudPlanDays(localPlan()), updatedAt:serverTimestamp()});
     if(activeUid !== user.uid) return;
     cloudReady = true;
@@ -809,6 +814,8 @@ async function connectUser(user){
 }
 
 authButton.addEventListener("click", async () => {
+  document.getElementById("displayMenu").hidden = true;
+  document.getElementById("displayDots").setAttribute("aria-expanded", "false");
   if(auth.currentUser){
     try{ await signOut(auth); }catch(error){ setStatus("Could not sign out"); }
     return;
