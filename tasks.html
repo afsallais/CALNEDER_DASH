@@ -11,6 +11,11 @@
 body{margin:0;min-height:100vh;padding:env(safe-area-inset-top) 14px env(safe-area-inset-bottom);background:var(--bg);color:var(--ink);font-family:system-ui,-apple-system,"Segoe UI",sans-serif}
 main{width:min(100%,620px);margin:0 auto;padding:18px 0 30px}
 header{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:16px}
+.top-actions{position:relative;display:flex;align-items:center;gap:8px}
+.more{width:42px;height:42px;border:1px solid var(--line);border-radius:12px;background:var(--card);color:var(--ink);font-size:24px;line-height:1;cursor:pointer}
+.more-menu{position:absolute;z-index:5;right:0;top:48px;min-width:165px;padding:6px;background:var(--card);border:1px solid var(--line);border-radius:12px;box-shadow:0 6px 20px #30434a22}
+.more-menu[hidden]{display:none}
+.more-menu button{width:100%;min-height:44px;border:0;border-radius:8px;padding:9px 11px;background:transparent;color:var(--ink);text-align:left;font-weight:650;cursor:pointer}
 .back{color:var(--accent);text-decoration:none;font-weight:650;font-size:14px}
 h1{font-size:clamp(24px,7vw,34px);line-height:1.15;margin:0 0 5px}
 .subtitle{color:var(--muted);font-size:14px}
@@ -45,12 +50,20 @@ ul{list-style:none;margin:0;padding:0;display:grid;gap:8px}
 </head>
 <body>
 <main>
-  <header><a class="back" href="./">← Dashboard</a><span id="today"></span></header>
+  <header>
+    <a class="back" href="./">← Dashboard</a>
+    <div class="top-actions">
+      <span id="today"></span>
+      <button id="menuToggle" class="more" type="button" aria-label="More options" aria-expanded="false">⋮</button>
+      <div id="accountMenu" class="more-menu" hidden>
+        <button id="authButton" type="button">Sign in to sync</button>
+      </div>
+    </div>
+  </header>
   <section class="panel" aria-labelledby="title">
     <h1 id="title">Study tasks</h1>
     <div class="subtitle">Keep today’s next steps in one simple list.</div>
     <div class="account">
-      <button id="authButton" type="button">Sign in to sync</button>
       <span class="status" id="status" role="status" aria-live="polite">Saved on this device</span>
     </div>
     <div class="list-head"><h2>Today’s priorities</h2><span id="count" class="count">0 / 0 done</span></div>
@@ -154,6 +167,8 @@ async function connectUser(user){
   }
 }
 authButton.onclick=async()=>{
+  document.getElementById("accountMenu").hidden=true;
+  document.getElementById("menuToggle").setAttribute("aria-expanded","false");
   if(auth.currentUser){try{await signOut(auth)}catch(e){setStatus("Could not sign out")}return}
   try{await signInWithPopup(auth,new GoogleAuthProvider())}
   catch(error){
@@ -161,6 +176,18 @@ authButton.onclick=async()=>{
     setStatus(messages[error.code]||"Sign-in failed — check Firebase Authentication setup");
   }
 };
+document.getElementById("menuToggle").onclick=event=>{
+  event.stopPropagation();
+  const menu=document.getElementById("accountMenu");
+  menu.hidden=!menu.hidden;
+  document.getElementById("menuToggle").setAttribute("aria-expanded",String(!menu.hidden));
+};
+document.addEventListener("click",event=>{
+  if(!event.target.closest(".top-actions")){
+    document.getElementById("accountMenu").hidden=true;
+    document.getElementById("menuToggle").setAttribute("aria-expanded","false");
+  }
+});
 onAuthStateChanged(auth,user=>{
   if(!user){activeUid=null;cloudReady=false;if(stopWatch)stopWatch();stopWatch=null;authButton.textContent="Sign in to sync";setStatus("Saved on this device")}
   else connectUser(user);
