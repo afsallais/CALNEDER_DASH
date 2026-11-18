@@ -815,12 +815,12 @@ function planRef(uid, weekKey){ return doc(db, "users", uid, "revisionPlans", we
 
 function importedCalendarTaskDate(task){
   const text=String(task.text||"");
-  const localMatch=text.match(/\\b(?:Mon|Tue|Wed|Thu|Fri|Sat|Sun),?\\s+([A-Za-z]{3,})\\s+(\\d{1,2})(?:,\\s*(\\d{4}))?,?\\s+(\\d{1,2}):(\\d{2})\\s*(AM|PM)\\b/i);
+  const localMatch=text.match(/\b(?:Mon|Tue|Wed|Thu|Fri|Sat|Sun),?\s+([A-Za-z]{3,})\s+(\d{1,2})(?:,\s*(\d{4}))?,?\s+(\d{1,2}):(\d{2})\s*(AM|PM)\b/i);
   if(localMatch){
-    const month=Date.parse(localMatch[1]+" 1, 2000"),day=Number(localMatch[2]);
+    const monthIndex=new Date(Date.parse(localMatch[1]+" 1, 2000")).getMonth(),day=Number(localMatch[2]);
     let year=Number(localMatch[3])||new Date().getFullYear();
     let hour=Number(localMatch[4])%12;if(localMatch[6].toUpperCase()==="PM")hour+=12;
-    let date=new Date(year,month,day,hour,Number(localMatch[5]));
+    let date=new Date(year,monthIndex,day,hour,Number(localMatch[5]));
     if(!localMatch[3]){
       const now=new Date(),delta=date.getTime()-now.getTime();
       if(delta < -120*86400000)date.setFullYear(date.getFullYear()+1);
@@ -829,7 +829,7 @@ function importedCalendarTaskDate(task){
     if(!Number.isNaN(date.getTime()))return date;
   }
   const id=String(task.calendarEventId||""),raw=id.slice(id.lastIndexOf("|")+1);
-  const match=raw.match(/(\\d{4})-?(\\d{2})-?(\\d{2})(?:T(\\d{2}):?(\\d{2})(?::?(\\d{2}))?)?/);
+  const match=raw.match(/(\d{4})-?(\d{2})-?(\d{2})(?:T(\d{2}):?(\d{2})(?::?(\d{2}))?)?/);
   if(!match)return null;
   return new Date(Number(match[1]),Number(match[2])-1,Number(match[3]),Number(match[4]||0),Number(match[5]||0),Number(match[6]||0));
 }
@@ -844,7 +844,7 @@ async function moveImportedTasksToRevision(uid){
     const weekday=dayDate.getDay()||7,weekMonday=new Date(dayDate);weekMonday.setDate(weekMonday.getDate()-weekday+1);
     const key=localDateKey(weekMonday),dayIndex=Math.round((dayDate-weekMonday)/86400000);
     if(!groups[key])groups[key]=Array.from({length:7},()=>[]);
-    groups[key][dayIndex].push({topic:String(task.text||"Lecture").replace(/\\s*★\\s*HIGH\\s*$/,""),done:!!task.done,priority:true,source:"tudelft-ical",calendarEventId:task.calendarEventId});
+    groups[key][dayIndex].push({topic:String(task.text||"Lecture").replace(/\s*★\s*HIGH\s*$/,""),done:!!task.done,priority:true,source:"tudelft-ical",calendarEventId:task.calendarEventId});
   });
   let moved=0;
   for(const key of Object.keys(groups).sort()){
@@ -875,27 +875,6 @@ async function moveImportedTasksToRevision(uid){
   }
   return {moved,unreadable};
 }
-async function loadPlanWeek(uid, weekKey, localItems){
-  planReady = false;
-  if(stopPlanWatch){ stopPlanWatch(); stopPlanWatch = null; }
-  const ref = planRef(uid, weekKey);
-  const snapshot = await getDoc(ref);
-  if(activeUid !== uid || currentWeekKey !== weekKey) return;
-  if(snapshot.exists()) applyPlan(snapshot.data().days);
-  else await setDoc(ref, {days:cloudPlanDays(localItems), updatedAt:serverTimestamp()});
-  if(activeUid !== uid || currentWeekKey !== weekKey) return;
-  planReady = true;
-  stopPlanWatch = onSnapshot(ref, value => {
-    if(activeUid === uid && currentWeekKey === weekKey && value.exists()) applyPlan(value.data().days);
-  }, error => setStatus("Plan sync issue — changes remain saved on this device"));
-  if(pendingPlanChange && pendingPlanChange.weekKey === weekKey){
-    const pending = pendingPlanChange; pendingPlanChange = null;
-    setDoc(ref, {days:cloudPlanDays(pending.items), updatedAt:serverTimestamp()}).catch(error => {
-      setStatus("Plan sync issue — changes remain saved on this device");
-      console.error("Firestore plan save failed:", error);
-    });
-  }
-}
 
 async function connectUser(user){
   activeUid = user.uid;
@@ -916,7 +895,7 @@ async function connectUser(user){
     if(activeUid !== user.uid) return;
     const migration = await moveImportedTasksToRevision(user.uid);
     if(activeUid !== user.uid) return;
-    setStatus(migration.moved ? "Cloud sync is on · " + migration.moved + " lecture(s) moved into the revision plan" : "Cloud sync is on");
+    setStatus(migration.unreadable ? "Some timetable entries still need a date; import the calendar file again" : migration.moved ? "Cloud sync is on · " + migration.moved + " lecture(s) moved into the revision plan" : "Cloud sync is on");
     stopTaskWatch = onSnapshot(taskRef(user.uid), snapshot => {
       if(activeUid === user.uid && snapshot.exists()) applyTasks(snapshot.data().items);
     }, error => setStatus("Sync issue — changes remain saved on this device"));
