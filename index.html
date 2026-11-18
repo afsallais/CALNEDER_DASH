@@ -117,6 +117,11 @@ html.color .focus-card.complete .focus-label,html.color .focus-card.complete .fo
 .task-form button{padding:5px 10px}
 .task-list{list-style:none;margin:7px 0 0;padding:0;display:grid;gap:4px}
 .task-row{display:flex;align-items:center;gap:7px;padding:5px 7px;border:1px solid var(--line);border-radius:8px;font-size:12px}
+.task-row.priority{background:#dcebf2;border-left:3px solid #3b7a99;padding-left:5px}
+.task-high-label{color:#24658c;font-size:9px;font-weight:750}
+.task-priority{flex:0 0 auto;border:0;background:transparent;color:#24658c;font:inherit;font-size:15px;line-height:1;padding:2px 4px;cursor:pointer}
+.task-priority[aria-pressed="false"]{color:var(--mute)}
+.task-priority:focus-visible{outline:2px solid var(--ink);outline-offset:1px}
 .task-row input{accent-color:var(--ink)}
 .task-row.done span{text-decoration:line-through;color:var(--mute)}
 .task-remove{margin-left:auto;flex:0 0 auto;border:0;background:none;color:var(--mute);font:inherit;font-size:17px;line-height:1;padding:0 3px;cursor:pointer}
@@ -629,13 +634,16 @@ function renderStudyTasks(){
  $("taskCount").textContent=done+" / "+STUDY_TASKS.length+" done";
  if(!STUDY_TASKS.length){list.innerHTML='<li class="task-empty">Add one small next step to get started.</li>';return}
  STUDY_TASKS.forEach(function(task,index){
-  var li=document.createElement("li");li.className="task-row"+(task.done?" done":"");
+  var li=document.createElement("li");li.className="task-row"+(task.done?" done":"")+(task.priority?" priority":"");
   var box=document.createElement("input");box.type="checkbox";box.checked=!!task.done;box.setAttribute("aria-label","Mark "+task.text+" complete");
   box.onchange=function(){STUDY_TASKS[index].done=box.checked;saveStudyTasks()};
   var label=document.createElement("span");label.textContent=task.text;
+  if(task.priority){var high=document.createElement("small");high.className="task-high-label";high.textContent=" ★ HIGH";label.appendChild(high)}
+  var priority=document.createElement("button");priority.type="button";priority.className="task-priority";priority.textContent=task.priority?"★":"☆";priority.setAttribute("aria-pressed",!!task.priority);priority.setAttribute("aria-label",task.priority?"Remove high priority from "+task.text:"Mark "+task.text+" high priority");
+  priority.onclick=function(){STUDY_TASKS[index].priority=!STUDY_TASKS[index].priority;saveStudyTasks()};
   var remove=document.createElement("button");remove.type="button";remove.className="task-remove";remove.textContent="×";remove.setAttribute("aria-label","Remove "+task.text);
   remove.onclick=function(){STUDY_TASKS.splice(index,1);saveStudyTasks()};
-  li.appendChild(box);li.appendChild(label);li.appendChild(remove);list.appendChild(li);
+  li.appendChild(box);li.appendChild(label);li.appendChild(priority);li.appendChild(remove);list.appendChild(li);
  });
 }
 function saveStudyTasks(){
