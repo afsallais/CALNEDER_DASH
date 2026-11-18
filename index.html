@@ -813,6 +813,28 @@ function applyPlan(days){
 function taskRef(uid){ return doc(db, "users", uid, "dashboard", "studyTasks"); }
 function planRef(uid, weekKey){ return doc(db, "users", uid, "revisionPlans", weekKey); }
 
+async function loadPlanWeek(uid, weekKey, localItems){
+  planReady = false;
+  if(stopPlanWatch){ stopPlanWatch(); stopPlanWatch = null; }
+  const ref = planRef(uid, weekKey);
+  const snapshot = await getDoc(ref);
+  if(activeUid !== uid || currentWeekKey !== weekKey) return;
+  if(snapshot.exists()) applyPlan(snapshot.data().days);
+  else await setDoc(ref, {days:cloudPlanDays(localItems), updatedAt:serverTimestamp()});
+  if(activeUid !== uid || currentWeekKey !== weekKey) return;
+  planReady = true;
+  stopPlanWatch = onSnapshot(ref, value => {
+    if(activeUid === uid && currentWeekKey === weekKey && value.exists()) applyPlan(value.data().days);
+  }, error => setStatus("Plan sync issue — changes remain saved on this device"));
+  if(pendingPlanChange && pendingPlanChange.weekKey === weekKey){
+    const pending = pendingPlanChange; pendingPlanChange = null;
+    setDoc(ref, {days:cloudPlanDays(pending.items), updatedAt:serverTimestamp()}).catch(error => {
+      setStatus("Plan sync issue — changes remain saved on this device");
+      console.error("Firestore plan save failed:", error);
+    });
+  }
+}
+
 function importedCalendarTaskDate(task){
   const text=String(task.text||"");
   const localMatch=text.match(/\b(?:Mon|Tue|Wed|Thu|Fri|Sat|Sun),?\s+([A-Za-z]{3,})\s+(\d{1,2})(?:,\s*(\d{4}))?,?\s+(\d{1,2}):(\d{2})\s*(AM|PM)\b/i);
