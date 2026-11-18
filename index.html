@@ -194,8 +194,6 @@ html.color .focus-card.complete .focus-label,html.color .focus-card.complete .fo
         <g id="ticks"></g>
         <line class="sunrise-mark" id="riseMarker" x1="100" y1="3" x2="100" y2="15"><title>Sunrise</title></line>
         <line class="sunset-mark" id="setMarker" x1="100" y1="3" x2="100" y2="15"><title>Sunset</title></line>
-        <line class="hh gl" id="gh1" x1="100" y1="100" x2="100" y2="58"/>
-        <line class="mh2 gl" id="gm1" x1="100" y1="100" x2="100" y2="30"/>
         <line class="hh" id="ah" x1="100" y1="100" x2="100" y2="58"/>
         <line class="mh2" id="am" x1="100" y1="100" x2="100" y2="30"/>
         <line class="sh" id="as" x1="100" y1="112" x2="100" y2="22"/>
@@ -312,7 +310,6 @@ function setG(el,val,html,quiet){
 }
 function clearGhosts(){
  document.querySelectorAll(".gh").forEach(function(e){e.classList.remove("gh")});
- ["gh1","gm1"].forEach(function(id){$(id).getAnimations().forEach(function(a){a.cancel()})});
 }
 // full refresh: black - white - black - white flash, content swaps while the screen is white, ghosts wiped
 function fullRefresh(fn){
@@ -409,12 +406,6 @@ function positionSolarMarkers(){
   g+='<line class="tk'+(big?' big':'')+'" x1="'+(100+r1*Math.sin(a)).toFixed(2)+'" y1="'+(100-r1*Math.cos(a)).toFixed(2)+'" x2="'+(100+r2*Math.sin(a)).toFixed(2)+'" y2="'+(100-r2*Math.cos(a)).toFixed(2)+'"/>'}
  $("ticks").innerHTML=g})();
 (function(){var g="",i,a,big,r1,r2;for(i=0;i<60;i++){a=i*6*Math.PI/180;big=i%5===0;r1=big?78:85;r2=90;g+='<line class="tk'+(big?' big':'')+'" x1="'+(100+r1*Math.sin(a)).toFixed(2)+'" y1="'+(100-r1*Math.cos(a)).toFixed(2)+'" x2="'+(100+r2*Math.sin(a)).toFixed(2)+'" y2="'+(100-r2*Math.cos(a)).toFixed(2)+'"/>'}$("ticksIn").innerHTML=g})();
-var pha=null,pma=null;
-function ghostHand(id,ang){
- var e=$(id);e.setAttribute("transform","rotate("+ang+" 100 100)");
- e.getAnimations().forEach(function(x){x.cancel()});
- e.animate([{opacity:.22},{opacity:0}],{duration:GHOST_SECONDS*1000,easing:"linear",fill:"forwards"});
-}
 function drawClock(g){
  var n=new Date(),h=n.getHours(),m=n.getMinutes(),sec=n.getSeconds();
  setG($("time"),String(h%12||12).padStart(2,"0")+":"+String(m).padStart(2,"0")+" "+(h<12?"AM":"PM"),false,!g);
@@ -423,7 +414,6 @@ function drawClock(g){
  $("ah").setAttribute("transform","rotate("+ha+" 100 100)");
  $("am").setAttribute("transform","rotate("+ma+" 100 100)");
  $("as").setAttribute("transform","rotate("+(sec*6)+" 100 100)");
- pha=ha;pma=ma;
  var parts=new Intl.DateTimeFormat("en-US",{timeZone:"Asia/Kolkata",hour:"numeric",minute:"2-digit",second:"2-digit",hour12:true}).formatToParts(n);
  var ih=+parts.find(function(x){return x.type==="hour"}).value,im=+parts.find(function(x){return x.type==="minute"}).value,is=+parts.find(function(x){return x.type==="second"}).value,dp=parts.find(function(x){return x.type==="dayPeriod"}).value;
  setG($("timeIn"),String(ih).padStart(2,"0")+":"+String(im).padStart(2,"0")+" "+dp,false,!g);
